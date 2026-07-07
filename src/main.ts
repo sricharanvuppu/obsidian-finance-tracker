@@ -19,6 +19,11 @@ export default class FinanceTrackerPlugin extends Plugin {
     this.store = new FinanceStore(this.app, this.settings.dataFilePath);
     await this.store.load();
 
+    // Ensure shared config (accounts/categories/budgets/recurring) lives in the
+    // synced data file so it travels across devices. Migrates from plugin
+    // settings on first run with this version.
+    await this.reconcileConfig();
+
     // Auto-post any due recurring transactions since last open.
     await this.materializeRecurring();
 
@@ -140,8 +145,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     workspace.revealLeaf(leaf);
   }
 
-  async loadSettings() {
-    const loaded = await this.loadData();
+  async loadSettings() {    const loaded = await this.loadData();
     this.settings = Object.assign({}, DEFAULT_SETTINGS, loaded);
     // ensure structures exist
     if (!this.settings.categories) this.settings.categories = DEFAULT_SETTINGS.categories;
@@ -152,7 +156,61 @@ export default class FinanceTrackerPlugin extends Plugin {
     }
   }
 
-  async saveSettings() {
-    await this.saveData(this.settings);
+  /**
+   * Makes the synced data file the source of truth for accounts, categories,
+   * budgets and recurring rules. On first run with this version it merges any
+   * config that previously lived only in plugin settings into the data file
+   * (union by id), so accounts are recovered no matter which device runs first.
+   */
+  async reconcileConfig() {
+    const d = this.store.data;
+    const migrated = (d.version ?? 1) >= 2;
+
+    if (!migrated) {
+      d.accounts = unionById(d.accounts ?? [], this.settings.accounts ?? []);
+      d.recurring = unionById(d.recurring ?? [], this.settings.recurring ?? []);
+      d.budgets = { ...(this.settings.budgets ?? {}), ...(d.budgets ?? {}) };
+      d.categories = d.categories ?? this.settings.categories ?? DEFAULT_SETTINGS.categories;
+      d.version = 2;
+      await this.store.save();
+    }
+
+    // Data file is the source of truth from here on.
+    this.settings.accounts = d.accounts ?? [];
+    this.settings.categories = d.categories ?? DEFAULT_SETTINGS.categories;
+    this.settings.budgets = d.budgets ?? {};
+    this.settings.recurring = d.recurring ?? [];
   }
+
+  async saveSettings() {
+    // Only device-local display prefs stay in plugin settings — NOT the shared
+    // config, so stale copies can't resurrect deleted accounts across devices.
+    await this.saveData({
+      dataFilePath: this.settings.dataFilePath,
+      currency: this.settings.currency,
+      locale: this.settings.locale,
+    });
+    // Shared config is persisted into the synced data file.
+    if (this.store) {
+      this.store.data.accounts = this.settings.accounts;
+      this.store.data.categories = this.settings.categories;
+      this.store.data.budgets = this.settings.budgets;
+      this.store.data.recurring = this.settings.recurring;
+      if ((this.store.data.version ?? 1) < 2) this.store.data.version = 2;
+      await this.store.save();
+    }
+  }
+}
+
+/** Merge two lists of objects by their `id`, keeping the first list's items on conflict. */
+function unionById<T extends { id: string }>(base: T[], extra: T[]): T[] {
+  const seen = new Set(base.map((x) => x.id));
+  const result = [...base];
+  for (const item of extra) {
+    if (!seen.has(item.id)) {
+      result.push(item);
+      seen.add(item.id);
+    }
+  }
+  return result;
 }

@@ -37,6 +37,10 @@ export class FinanceStore {
           version: parsed.version ?? 1,
           transactions: Array.isArray(parsed.transactions) ? parsed.transactions : [],
           loans: Array.isArray(parsed.loans) ? parsed.loans : [],
+          accounts: parsed.accounts,
+          categories: parsed.categories,
+          budgets: parsed.budgets,
+          recurring: parsed.recurring,
         };
       } else {
         this.data = { version: 1, transactions: [], loans: [] };

@@ -30,6 +30,11 @@ export interface FinanceData {
   version: number;
   transactions: Transaction[];
   loans: Loan[];
+  // Shared config lives in the synced data file (so it travels across devices).
+  accounts?: Account[];
+  categories?: CategoryConfig;
+  budgets?: BudgetMap;
+  recurring?: RecurringRule[];
 }
 
 export type LoanDirection = "lent" | "borrowed";
