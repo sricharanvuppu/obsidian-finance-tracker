@@ -15,6 +15,7 @@ export interface Account {
 export interface Transaction {
   id: string;
   date: string; // YYYY-MM-DD
+  time?: string; // HH:mm (24-hour), optional for older entries
   type: TxnType;
   category: string;
   subcategory: string;

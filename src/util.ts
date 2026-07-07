@@ -17,6 +17,26 @@ export function todayISO(): string {
   return toISO(d);
 }
 
+/** Current time as HH:mm (24-hour) in IST (Asia/Kolkata), regardless of device timezone. */
+export function nowTimeIST(): string {
+  try {
+    return new Intl.DateTimeFormat("en-GB", {
+      timeZone: "Asia/Kolkata",
+      hour: "2-digit",
+      minute: "2-digit",
+      hour12: false,
+    }).format(new Date());
+  } catch {
+    const d = new Date();
+    return String(d.getHours()).padStart(2, "0") + ":" + String(d.getMinutes()).padStart(2, "0");
+  }
+}
+
+/** Combined date+time key for chronological sorting (falls back to 00:00 when no time). */
+export function dateTimeKey(t: { date: string; time?: string }): string {
+  return (t.date || "") + "T" + (t.time || "00:00");
+}
+
 export function toISO(d: Date): string {
   const y = d.getFullYear();
   const m = String(d.getMonth() + 1).padStart(2, "0");
@@ -270,12 +290,13 @@ function csvEscape(v: string): string {
 }
 
 export function transactionsToCSV(txns: Transaction[], accounts: Account[] = []): string {
-  const header = ["date", "type", "category", "sub-category", "amount", "account", "to-account", "note"];
+  const header = ["date", "time", "type", "category", "sub-category", "amount", "account", "to-account", "note"];
   const lines = [header.join(",")];
   for (const t of txns) {
     lines.push(
       [
         t.date,
+        t.time || "",
         t.type,
         csvEscape(t.category || ""),
         csvEscape(t.subcategory || ""),

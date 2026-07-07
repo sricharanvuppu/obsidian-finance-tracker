@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { Account, CategoryMap, CategoryType, Transaction, TxnType, TYPE_LABELS } from "./types";
-import { todayISO } from "./util";
+import { todayISO, nowTimeIST } from "./util";
 import { PromptModal } from "./PromptModal";
 import type FinanceTrackerPlugin from "./main";
 
@@ -14,6 +14,7 @@ export class AddTransactionModal extends Modal {
   private subcategory = "";
   private amount: number | null = null;
   private date: string = todayISO();
+  private time: string = nowTimeIST();
   private note = "";
   private account = ""; // account id (source)
   private toAccount = ""; // account id (transfer destination)
@@ -33,6 +34,7 @@ export class AddTransactionModal extends Modal {
       this.subcategory = editing.subcategory;
       this.amount = editing.amount;
       this.date = editing.date;
+      this.time = editing.time ?? nowTimeIST();
       this.note = editing.note;
       this.account = editing.account ?? "";
       this.toAccount = editing.toAccount ?? "";
@@ -103,6 +105,14 @@ export class AddTransactionModal extends Modal {
       txt.inputEl.type = "date";
       txt.setValue(this.date);
       txt.onChange((v) => (this.date = v));
+    });
+
+    // Time (24-hour, defaults to current IST time)
+    new Setting(contentEl).setName("Time").addText((txt) => {
+      txt.inputEl.type = "time";
+      txt.inputEl.setAttr("step", "60");
+      txt.setValue(this.time);
+      txt.onChange((v) => (this.time = v));
     });
 
     // Note
@@ -287,6 +297,7 @@ export class AddTransactionModal extends Modal {
 
     const payload: Omit<Transaction, "id"> = {
       date: this.date || todayISO(),
+      time: this.time || nowTimeIST(),
       type: this.type,
       category: this.type === "transfer" ? "Transfer" : this.category,
       subcategory: this.type === "transfer" ? "" : this.subcategory,

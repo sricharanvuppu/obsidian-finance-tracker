@@ -281,6 +281,9 @@
 .ft-table th.ft-col-amount {
   text-align: right;
 }
+.ft-table td.ft-col-date {
+  white-space: nowrap;
+}
 .ft-table td.ft-type-income,
 .ft-table td.ft-amount.ft-type-income { color: #59a14f; }
 .ft-table td.ft-type-expense,

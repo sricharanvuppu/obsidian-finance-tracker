@@ -36,6 +36,7 @@ import {
   interestPaidInRange,
   lendingNetCashInRange,
   accountName,
+  dateTimeKey,
 } from "./util";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { RecurringModal } from "./RecurringModal";
@@ -789,8 +790,9 @@ export class FinanceDashboardView extends ItemView {
 
     const sorted = [...txns].sort((a, b) => {
       const dir = this.sortDir === "asc" ? 1 : -1;
-      const ka = a[this.sortKey] ?? "";
-      const kb = b[this.sortKey] ?? "";
+      // Sort the Date column chronologically using date + time.
+      const ka = this.sortKey === "date" ? dateTimeKey(a) : a[this.sortKey] ?? "";
+      const kb = this.sortKey === "date" ? dateTimeKey(b) : b[this.sortKey] ?? "";
       if (ka < kb) return -1 * dir;
       if (ka > kb) return 1 * dir;
       return 0;
@@ -832,7 +834,7 @@ export class FinanceDashboardView extends ItemView {
     const thead = table.createEl("thead");
     const hr = thead.createEl("tr");
     const cols: { key: keyof Transaction; label: string }[] = [
-      { key: "date", label: "Date" },
+      { key: "date", label: "Date / Time" },
       { key: "type", label: "Type" },
       { key: "category", label: "Category" },
       { key: "subcategory", label: "Sub-category" },
@@ -860,7 +862,7 @@ export class FinanceDashboardView extends ItemView {
     const tbody = table.createEl("tbody");
     for (const t of pageRows) {
       const tr = tbody.createEl("tr");
-      tr.createEl("td", { text: t.date });
+      tr.createEl("td", { text: t.time ? `${t.date} ${t.time}` : t.date }).addClass("ft-col-date");
       tr.createEl("td", { text: t.type }).addClass("ft-type-" + t.type);
       tr.createEl("td", { text: t.category });
       tr.createEl("td", { text: t.subcategory || "—" });
