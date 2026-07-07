@@ -79,15 +79,17 @@ export default class FinanceTrackerPlugin extends Plugin {
 
     this.addSettingTab(new FinanceSettingTab(this.app, this));
 
-    // Live-refresh when the data file changes on disk (e.g. after a sync on
-    // another device, or an external edit). Covers modify/create/rename.
+    // Live-refresh when any data file under the base folder changes on disk
+    // (e.g. after a sync on another device, or an external edit).
     const onFileChange = (file: { path: string }) => {
-      if (file.path === normalizePath(this.settings.dataFilePath)) {
+      const base = normalizePath(this.store.baseDir);
+      if (file.path === base || file.path.startsWith(base + "/")) {
         this.reloadIfChanged();
       }
     };
     this.registerEvent(this.app.vault.on("modify", onFileChange));
     this.registerEvent(this.app.vault.on("create", onFileChange));
+    this.registerEvent(this.app.vault.on("delete", onFileChange));
     this.registerEvent(this.app.vault.on("rename", onFileChange));
   }
 
@@ -105,32 +107,22 @@ export default class FinanceTrackerPlugin extends Plugin {
   private reloadTimer: number | null = null;
 
   /**
-   * Reloads the data file from disk if it differs from what we hold in memory,
-   * then refreshes any open dashboards. Debounced, and ignores changes that
-   * merely match our own last write (so it doesn't loop on self-saves).
+   * Reloads all data from disk and refreshes dashboards. Debounced, and ignores
+   * changes that happened right after our own write (so it doesn't loop).
    */
   private reloadIfChanged() {
+    if (Date.now() - this.store.lastWrite < 1500) return; // our own recent write
     if (this.reloadTimer) window.clearTimeout(this.reloadTimer);
     this.reloadTimer = window.setTimeout(async () => {
+      if (Date.now() - this.store.lastWrite < 1500) return;
       try {
-        const path = normalizePath(this.settings.dataFilePath);
-        if (!(await this.app.vault.adapter.exists(path))) return;
-        const raw = await this.app.vault.adapter.read(path);
-        let incoming: string;
-        try {
-          incoming = JSON.stringify(JSON.parse(raw));
-        } catch {
-          return; // file mid-write / invalid JSON; ignore this event
-        }
-        const inMemory = JSON.stringify(this.store.data);
-        if (incoming === inMemory) return; // our own save — nothing to do
         await this.store.load();
         await this.reconcileConfig();
         this.refreshDashboards();
       } catch (e) {
         console.error("Finance Tracker: reloadIfChanged failed", e);
       }
-    }, 400);
+    }, 500);
   }
 
   /**
@@ -214,7 +206,7 @@ export default class FinanceTrackerPlugin extends Plugin {
       d.budgets = { ...(this.settings.budgets ?? {}), ...(d.budgets ?? {}) };
       d.categories = d.categories ?? this.settings.categories ?? DEFAULT_SETTINGS.categories;
       d.version = 2;
-      await this.store.save();
+      await this.store.saveConfig();
     }
 
     // Data file is the source of truth from here on.
@@ -239,7 +231,7 @@ export default class FinanceTrackerPlugin extends Plugin {
       this.store.data.budgets = this.settings.budgets;
       this.store.data.recurring = this.settings.recurring;
       if ((this.store.data.version ?? 1) < 2) this.store.data.version = 2;
-      await this.store.save();
+      await this.store.saveConfig();
     }
   }
 }
