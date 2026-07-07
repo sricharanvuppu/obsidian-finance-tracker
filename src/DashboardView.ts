@@ -995,23 +995,35 @@ export class FinanceDashboardView extends ItemView {
         else if (pct >= 80) fill.addClass("ft-warn");
       }
 
-      // category breakdown
+      // per-event charts: category pie + spend over time
       const byCat = new Map<string, number>();
       evTxns.filter((t) => t.type === "expense" || t.type === "investment").forEach((t) => {
         byCat.set(t.category, (byCat.get(t.category) ?? 0) + t.amount);
       });
       const cats = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]);
       if (cats.length) {
-        const tbl = box.createEl("table", { cls: "ft-table" });
-        const hr = tbl.createEl("thead").createEl("tr");
-        ["Category", "Amount", "Share"].forEach((h) => hr.createEl("th", { text: h }));
-        const tb = tbl.createEl("tbody");
-        for (const [c, v] of cats) {
-          const tr = tb.createEl("tr");
-          tr.createEl("td", { text: c });
-          tr.createEl("td", { text: formatCurrency(v, this.plugin.settings) }).addClass("ft-amount");
-          tr.createEl("td", { text: `${spent ? ((v / spent) * 100).toFixed(0) : 0}%` }).addClass("ft-amount");
-        }
+        const charts = box.createDiv("ft-charts");
+
+        const pieBox = charts.createDiv("ft-chart-box");
+        pieBox.createEl("h3", { text: "Category breakdown" });
+        this.makePie(pieBox.createEl("canvas"), cats);
+
+        const evSpendTxns = evTxns.filter((t) => t.type === "expense" || t.type === "investment");
+        const evMonthsE = Array.from(new Set(evSpendTxns.map((t) => monthKey(t.date)))).sort();
+        this.makeBars(
+          charts.createDiv("ft-chart-box"),
+          "Spend over time",
+          evMonthsE.map(monthLabel),
+          [
+            {
+              label: "Spent",
+              data: evMonthsE.map((mk) =>
+                evSpendTxns.filter((t) => monthKey(t.date) === mk).reduce((s, t) => s + t.amount, 0)
+              ),
+              backgroundColor: "#e15759",
+            },
+          ]
+        );
       } else {
         box.createDiv({ cls: "ft-empty", text: "No transactions tagged to this event yet." });
       }
