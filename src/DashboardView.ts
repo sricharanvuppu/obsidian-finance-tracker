@@ -1035,9 +1035,6 @@ export class FinanceDashboardView extends ItemView {
     const expenseArr = bucket("expense");
     const investArr = bucket("investment");
     const savingsArr = months.map((_, i) => incomeArr[i] - expenseArr[i]);
-    const savingsRateArr = months.map((_, i) =>
-      incomeArr[i] > 0 ? Math.round(((incomeArr[i] - expenseArr[i]) / incomeArr[i]) * 100) : 0
-    );
     let running = 0;
     const cumulativeArr = savingsArr.map((s) => (running += s));
 
@@ -1060,16 +1057,25 @@ export class FinanceDashboardView extends ItemView {
     }
 
     // 3. Monthly cash flow (grouped bars)
-    this.makeBars(grid.createDiv("ft-chart-box"), "Monthly cash flow", labels, [
+    this.makeBars(grid.createDiv("ft-chart-box"), "Monthly income vs expense", labels, [
       { label: "Income", data: incomeArr, backgroundColor: "#59a14f" },
       { label: "Expense", data: expenseArr, backgroundColor: "#e15759" },
-      { label: "Savings", data: savingsArr, backgroundColor: "#edc948" },
     ]);
 
-    // 4. Savings rate over time (line, %)
-    this.makeLine(grid.createDiv("ft-chart-box"), "Savings rate over time", labels, [
-      { label: "Savings rate", data: savingsRateArr, borderColor: "#edc948", backgroundColor: "#edc948", tension: 0.3, pointRadius: 3 },
-    ], { percent: true });
+    // 4. Monthly expense % of income (line, % + 100% reference)
+    const monthlyExpensePct = months.map((_, i) =>
+      incomeArr[i] > 0 ? Math.round((expenseArr[i] / incomeArr[i]) * 100) : 0
+    );
+    this.makeLine(
+      grid.createDiv("ft-chart-box"),
+      "Monthly expense % (of income)",
+      labels,
+      [
+        { label: "Expense %", data: monthlyExpensePct, borderColor: "#e15759", backgroundColor: "#e15759", tension: 0.3, pointRadius: 3 },
+        { label: "100% (all income spent)", data: months.map(() => 100), borderColor: "#bab0ac", borderDash: [6, 6], pointRadius: 0, fill: false },
+      ],
+      { percent: true }
+    );
 
     // 5. Spending by category over time (stacked bars)
     const topCats = expByCat.slice(0, 6).map((e) => e[0]);
@@ -1101,9 +1107,9 @@ export class FinanceDashboardView extends ItemView {
       { stacked: true }
     );
 
-    // 6. Cumulative savings (line)
-    this.makeLine(grid.createDiv("ft-chart-box"), "Cumulative savings", labels, [
-      { label: "Cumulative savings", data: cumulativeArr, borderColor: "#4e79a7", backgroundColor: "#4e79a7", tension: 0.3, pointRadius: 3, fill: false },
+    // 6. Cumulative net (income − expense) over time
+    this.makeLine(grid.createDiv("ft-chart-box"), "Cumulative net (income − expense)", labels, [
+      { label: "Cumulative net", data: cumulativeArr, borderColor: "#4e79a7", backgroundColor: "#4e79a7", tension: 0.3, pointRadius: 3, fill: false },
     ]);
 
     // 7. Top spending categories (horizontal bar, share of total)
@@ -1118,21 +1124,6 @@ export class FinanceDashboardView extends ItemView {
         { horizontal: true }
       );
     }
-
-    // 8. Expense-to-income ratio over time (line, % + 100% reference)
-    const ratioArr = months.map((_, i) =>
-      incomeArr[i] > 0 ? Math.round((expenseArr[i] / incomeArr[i]) * 100) : 0
-    );
-    this.makeLine(
-      grid.createDiv("ft-chart-box"),
-      "Expense-to-income ratio",
-      labels,
-      [
-        { label: "Expense ratio", data: ratioArr, borderColor: "#e15759", backgroundColor: "#e15759", tension: 0.3, pointRadius: 3 },
-        { label: "100% (all income)", data: months.map(() => 100), borderColor: "#bab0ac", borderDash: [6, 6], pointRadius: 0, fill: false },
-      ],
-      { percent: true }
-    );
 
     // 9. Category change vs previous month (what's driving the increase)
     if (months.length >= 2) {
