@@ -930,6 +930,29 @@ export class FinanceDashboardView extends ItemView {
       );
     }
 
+    // Event spend over time (stacked bars per event across months)
+    const evAll = all.filter((t) => t.event && (t.type === "expense" || t.type === "investment"));
+    const evMonths = Array.from(new Set(evAll.map((t) => monthKey(t.date)))).sort();
+    const spendingEvents = events.filter((ev) => spentOf(ev.id) > 0);
+    if (evMonths.length && spendingEvents.length) {
+      const datasets = spendingEvents.map((ev, i) => ({
+        label: ev.name,
+        data: evMonths.map((mk) =>
+          evAll
+            .filter((t) => t.event === ev.id && monthKey(t.date) === mk)
+            .reduce((s, t) => s + t.amount, 0)
+        ),
+        backgroundColor: PALETTE[i % PALETTE.length],
+      }));
+      this.makeBars(
+        overview.createDiv("ft-chart-box"),
+        "Event spend over time",
+        evMonths.map(monthLabel),
+        datasets,
+        { stacked: true }
+      );
+    }
+
     const grid = root.createDiv("ft-charts");
 
     for (const ev of events) {
