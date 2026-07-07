@@ -580,8 +580,6 @@ export class FinanceDashboardView extends ItemView {
     const income = sumByType(mtx, "income");
     const expense = sumByType(mtx, "expense");
     const investment = sumByType(mtx, "investment");
-    const savings = income - expense; // savings = income not consumed; investing is a use of savings
-    const savingsRate = income > 0 ? (savings / income) * 100 : 0;
     const lendingCash = lendingNetCashInRange(this.plugin.store.getLoans(), this.currentRange());
     // Net cash flow is a true liquid-cash metric, so it counts EVERYTHING that
     // moved cash — including capital events (they go out of your income too).
@@ -610,9 +608,6 @@ export class FinanceDashboardView extends ItemView {
       "Counts only regular monthly expenses. Excludes capital events (weddings, home, etc.), investments, and money lent out — those are tracked separately.");
     card("Investment", investment, "ft-investment", undefined,
       "Money moved into investments this range (excludes capital-event spend).");
-    card("Savings", savings, savings >= 0 ? "ft-savings" : "ft-negative",
-      `Savings rate ${savingsRate.toFixed(0)}%`,
-      "Income − everyday Expense. Excludes capital events, investments and lending.");
     card("Net cash flow", netCash, netCash >= 0 ? "ft-netcash" : "ft-negative",
       capitalSpend > 0 ? "Incl. capital events & lending" : (lendingCash !== 0 ? "Incl. lending activity" : "Income − Expense − Investment"),
       "Actual change in liquid cash: all income minus all expenses, investments, capital events, and net lending. This is the true cash movement (matches your account balances).");
