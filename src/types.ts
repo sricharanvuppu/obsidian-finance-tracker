@@ -23,7 +23,28 @@ export interface Transaction {
   note: string;
   account?: string; // account id (source account for income/expense/investment/transfer-from)
   toAccount?: string; // account id, only for transfers (destination)
+  event?: string; // life-event id this transaction belongs to
   recurringId?: string; // set when auto-generated from a recurring rule
+}
+
+export type EventStatus = "planned" | "active" | "done";
+
+export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
+  planned: "Planned",
+  active: "In progress",
+  done: "Completed",
+};
+
+/** A large one-off life event (wedding, home, baby) tracked separately. */
+export interface LifeEvent {
+  id: string;
+  name: string;
+  target?: number; // budget/target amount
+  startDate?: string;
+  endDate?: string;
+  status: EventStatus;
+  capital: boolean; // if true, excluded from monthly/overspending analysis
+  note?: string;
 }
 
 export interface FinanceData {
@@ -35,6 +56,7 @@ export interface FinanceData {
   categories?: CategoryConfig;
   budgets?: BudgetMap;
   recurring?: RecurringRule[];
+  events?: LifeEvent[];
 }
 
 export type LoanDirection = "lent" | "borrowed";
@@ -108,6 +130,7 @@ export interface FinanceSettings {
   recurring: RecurringRule[];
   budgets: BudgetMap;
   accounts: Account[];
+  events: LifeEvent[];
 }
 
 export const TYPE_LABELS: Record<TxnType, string> = {
@@ -157,4 +180,5 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   recurring: [],
   budgets: {},
   accounts: [],
+  events: [],
 };

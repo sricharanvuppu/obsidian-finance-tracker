@@ -18,6 +18,7 @@ export class AddTransactionModal extends Modal {
   private note = "";
   private account = ""; // account id (source)
   private toAccount = ""; // account id (transfer destination)
+  private event = ""; // life-event id (optional)
 
   private dynamicEl!: HTMLElement;
   private catSelect: HTMLSelectElement | null = null;
@@ -38,6 +39,7 @@ export class AddTransactionModal extends Modal {
       this.note = editing.note;
       this.account = editing.account ?? "";
       this.toAccount = editing.toAccount ?? "";
+      this.event = editing.event ?? "";
     }
   }
 
@@ -121,6 +123,20 @@ export class AddTransactionModal extends Modal {
       txt.setPlaceholder("Optional");
       txt.onChange((v) => (this.note = v));
     });
+
+    // Event (optional) — only for non-transfer types, when events exist
+    const events = this.plugin.settings.events || [];
+    if (events.length > 0 && this.type !== "transfer") {
+      new Setting(contentEl)
+        .setName("Life event")
+        .setDesc("Optional — tag this to a wedding/home/etc.")
+        .addDropdown((dd) => {
+          dd.addOption("", "None");
+          events.forEach((e) => dd.addOption(e.id, e.name + (e.capital ? " (capital)" : "")));
+          dd.setValue(this.event);
+          dd.onChange((v) => (this.event = v));
+        });
+    }
 
     // Actions
     const actions = contentEl.createDiv("ft-modal-actions");
@@ -305,6 +321,7 @@ export class AddTransactionModal extends Modal {
       note: this.note.trim(),
       account: this.account || undefined,
       toAccount: this.type === "transfer" ? this.toAccount || undefined : undefined,
+      event: this.type === "transfer" ? undefined : this.event || undefined,
     };
 
     if (this.editing) {

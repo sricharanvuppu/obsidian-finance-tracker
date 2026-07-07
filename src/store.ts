@@ -96,6 +96,7 @@ export class FinanceStore {
       categories: parsed.categories,
       budgets: parsed.budgets,
       recurring: parsed.recurring,
+      events: parsed.events,
     };
   }
 
@@ -130,6 +131,7 @@ export class FinanceStore {
       categories: cfg.categories,
       budgets: cfg.budgets,
       recurring: cfg.recurring,
+      events: cfg.events,
     };
   }
 
@@ -170,6 +172,7 @@ export class FinanceStore {
       categories: this.data.categories,
       budgets: this.data.budgets ?? {},
       recurring: this.data.recurring ?? [],
+      events: this.data.events ?? [],
     };
     await this.writeFile(this.configPath, JSON.stringify(cfg, null, 2));
   }

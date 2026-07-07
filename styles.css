@@ -107,6 +107,7 @@
 .ft-card.ft-investment { border-left-color: #4e79a7; }
 .ft-card.ft-savings { border-left-color: #edc948; }
 .ft-card.ft-netcash { border-left-color: #76b7b2; }
+.ft-card.ft-capital { border-left-color: #b07aa1; }
 .ft-card.ft-negative { border-left-color: #e15759; }
 .ft-card.ft-negative .ft-card-value { color: #e15759; }
 
@@ -384,3 +385,25 @@
   padding-top: 8px;
 }
 .ft-table tr.ft-inactive { opacity: 0.5; }
+
+/* Events */
+.ft-event-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ft-event-head h3 { margin: 0; }
+.ft-event-status {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--background-modifier-border);
+}
+.ft-event-status.ft-status-active { background: #4e79a7; color: #fff; }
+.ft-event-status.ft-status-planned { background: #edc948; color: #222; }
+.ft-event-status.ft-status-done { background: #59a14f; color: #fff; }
+.ft-event-figures {
+  font-weight: 600;
+  margin: 6px 0 8px;
+}

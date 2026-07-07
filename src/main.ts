@@ -185,6 +185,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     if (!this.settings.categories) this.settings.categories = DEFAULT_SETTINGS.categories;
     if (!Array.isArray(this.settings.recurring)) this.settings.recurring = [];
     if (!Array.isArray(this.settings.accounts)) this.settings.accounts = [];
+    if (!Array.isArray(this.settings.events)) this.settings.events = [];
     if (!this.settings.budgets || typeof this.settings.budgets !== "object") {
       this.settings.budgets = {};
     }
@@ -203,6 +204,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     if (!migrated) {
       d.accounts = unionById(d.accounts ?? [], this.settings.accounts ?? []);
       d.recurring = unionById(d.recurring ?? [], this.settings.recurring ?? []);
+      d.events = unionById(d.events ?? [], this.settings.events ?? []);
       d.budgets = { ...(this.settings.budgets ?? {}), ...(d.budgets ?? {}) };
       d.categories = d.categories ?? this.settings.categories ?? DEFAULT_SETTINGS.categories;
       d.version = 2;
@@ -214,6 +216,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     this.settings.categories = d.categories ?? DEFAULT_SETTINGS.categories;
     this.settings.budgets = d.budgets ?? {};
     this.settings.recurring = d.recurring ?? [];
+    this.settings.events = d.events ?? [];
   }
 
   async saveSettings() {
@@ -230,6 +233,7 @@ export default class FinanceTrackerPlugin extends Plugin {
       this.store.data.categories = this.settings.categories;
       this.store.data.budgets = this.settings.budgets;
       this.store.data.recurring = this.settings.recurring;
+      this.store.data.events = this.settings.events;
       if ((this.store.data.version ?? 1) < 2) this.store.data.version = 2;
       await this.store.saveConfig();
     }

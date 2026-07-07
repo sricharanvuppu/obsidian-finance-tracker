@@ -1,6 +1,6 @@
 {
   "name": "finance-tracker",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Track income, expenses, investments and savings with a one-click input and a visual dashboard.",
   "main": "main.js",
   "scripts": {

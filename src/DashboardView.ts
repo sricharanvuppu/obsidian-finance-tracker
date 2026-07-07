@@ -13,7 +13,7 @@ import {
   LineController,
   BarController,
 } from "chart.js";
-import { Transaction, TxnType } from "./types";
+import { Transaction, TxnType, EVENT_STATUS_LABELS } from "./types";
 import {
   DateRange,
   RangePreset,
@@ -43,6 +43,7 @@ import { RecurringModal } from "./RecurringModal";
 import { BudgetModal } from "./BudgetModal";
 import { AccountModal } from "./AccountModal";
 import { LoanModal } from "./LoanModal";
+import { EventModal } from "./EventModal";
 import type FinanceTrackerPlugin from "./main";
 
 Chart.register(
@@ -97,7 +98,7 @@ const percentLabelPlugin = {
 export class FinanceDashboardView extends ItemView {
   private plugin: FinanceTrackerPlugin;
 
-  private mode: "dashboard" | "yearly" | "budget" | "lending" | "insights" = "dashboard";
+  private mode: "dashboard" | "yearly" | "budget" | "lending" | "insights" | "events" = "dashboard";
   private preset: RangePreset = "this-month";
   private custom: DateRange | null = null;
   private typeFilter: "all" | TxnType = "all";
@@ -144,6 +145,18 @@ export class FinanceDashboardView extends ItemView {
 
   private currentRange(): DateRange {
     return computeRange(this.preset, this.plugin.store.getAll(), this.custom ?? undefined);
+  }
+
+  /** IDs of events flagged as capital (excluded from monthly/overspending analysis). */
+  private capitalEventIds(): Set<string> {
+    return new Set((this.plugin.settings.events || []).filter((e) => e.capital).map((e) => e.id));
+  }
+
+  /** Drops transactions tagged to a capital event (for monthly/behavioral views). */
+  private nonCapital(txns: Transaction[]): Transaction[] {
+    const cap = this.capitalEventIds();
+    if (cap.size === 0) return txns;
+    return txns.filter((t) => !(t.event && cap.has(t.event)));
   }
 
   private filtered(): Transaction[] {
@@ -193,6 +206,10 @@ export class FinanceDashboardView extends ItemView {
       this.renderInsights(root);
       return;
     }
+    if (this.mode === "events") {
+      this.renderEvents(root);
+      return;
+    }
 
     this.renderToolbar(root);
     const txns = this.filtered();
@@ -213,6 +230,7 @@ export class FinanceDashboardView extends ItemView {
       { key: "yearly", label: "Yearly" },
       { key: "budget", label: "Budget" },
       { key: "lending", label: "Lending" },
+      { key: "events", label: "Events" },
     ];
     modes.forEach((m) => {
       const b = tabs.createEl("button", {
@@ -242,6 +260,11 @@ export class FinanceDashboardView extends ItemView {
     loanBtn.setAttr("aria-label", "Manage lending & borrowing");
     loanBtn.onclick = () =>
       new LoanModal(this.app, this.plugin, () => this.refresh()).open();
+
+    const eventBtn = tabs.createEl("button", { text: "🎉 Events", cls: "ft-chip" });
+    eventBtn.setAttr("aria-label", "Manage life events");
+    eventBtn.onclick = () =>
+      new EventModal(this.app, this.plugin, () => this.refresh()).open();
 
     const exportBtn = tabs.createEl("button", { text: "⤓ Export CSV", cls: "ft-chip" });
     exportBtn.onclick = () => this.exportCSV();
@@ -366,8 +389,7 @@ export class FinanceDashboardView extends ItemView {
       return;
     }
 
-    const monthTx = this.plugin.store
-      .getAll()
+    const monthTx = this.nonCapital(this.plugin.store.getAll())
       .filter((t) => t.type === "expense" && t.date.slice(0, 7) === this.budgetMonth);
     const actualByCat = new Map<string, number>();
     monthTx.forEach((t) =>
@@ -531,13 +553,19 @@ export class FinanceDashboardView extends ItemView {
 
   // ── Summary cards ────────────────────────────────────────────────
   private renderSummary(root: HTMLElement, txns: Transaction[]) {
-    const income = sumByType(txns, "income");
-    const expense = sumByType(txns, "expense");
-    const investment = sumByType(txns, "investment");
+    const mtx = this.nonCapital(txns); // exclude capital-event spend from monthly analysis
+    const income = sumByType(mtx, "income");
+    const expense = sumByType(mtx, "expense");
+    const investment = sumByType(mtx, "investment");
     const savings = income - expense; // savings = income not consumed; investing is a use of savings
     const savingsRate = income > 0 ? (savings / income) * 100 : 0;
     const lendingCash = lendingNetCashInRange(this.plugin.store.getLoans(), this.currentRange());
     const netCash = income - expense - investment + lendingCash; // change in liquid cash this period
+
+    const cap = this.capitalEventIds();
+    const capitalSpend = txns
+      .filter((t) => t.event && cap.has(t.event) && (t.type === "expense" || t.type === "investment"))
+      .reduce((s, t) => s + t.amount, 0);
 
     const cards = root.createDiv("ft-cards");
     const card = (label: string, value: number, cls: string, extra?: string) => {
@@ -553,6 +581,9 @@ export class FinanceDashboardView extends ItemView {
       `Savings rate ${savingsRate.toFixed(0)}%`);
     card("Net cash flow", netCash, netCash >= 0 ? "ft-netcash" : "ft-negative",
       lendingCash !== 0 ? "Incl. lending activity" : "Income − Expense − Investment");
+    if (capitalSpend > 0) {
+      card("Capital events", capitalSpend, "ft-capital", "Excluded from monthly analysis");
+    }
 
     this.renderBalances(root);
   }
@@ -688,7 +719,7 @@ export class FinanceDashboardView extends ItemView {
     const canvas = box.createEl("canvas");
 
     const byCat = new Map<string, number>();
-    txns.filter((t) => t.type === "expense").forEach((t) => {
+    this.nonCapital(txns).filter((t) => t.type === "expense").forEach((t) => {
       byCat.set(t.category, (byCat.get(t.category) ?? 0) + t.amount);
     });
     const entries = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]);
@@ -764,9 +795,9 @@ export class FinanceDashboardView extends ItemView {
     // Build monthly buckets across the selected range using all matching txns
     // (ignore type/category filters here so the trend shows the full picture).
     const range = this.currentRange();
-    const inScope = this.plugin.store
-      .getAll()
-      .filter((t) => inRange(t.date, range));
+    const inScope = this.nonCapital(
+      this.plugin.store.getAll().filter((t) => inRange(t.date, range))
+    );
 
     if (inScope.length === 0) {
       box.createDiv({ cls: "ft-empty", text: "No data in this range." });
@@ -821,6 +852,84 @@ export class FinanceDashboardView extends ItemView {
     }));
   }
 
+  // ── Events tab: track big one-off life events ───────────────────
+  private renderEvents(root: HTMLElement) {
+    const bar = root.createDiv("ft-toolbar");
+    const manage = bar.createEl("button", { text: "+ Add / manage events", cls: "mod-cta" });
+    manage.onclick = () => new EventModal(this.app, this.plugin, () => this.refresh()).open();
+
+    const events = this.plugin.settings.events || [];
+    if (events.length === 0) {
+      root.createDiv({ cls: "ft-empty", text: "No life events yet. Use “Add / manage events” to track a wedding, home purchase, etc." });
+      return;
+    }
+
+    const all = this.plugin.store.getAll();
+    const grid = root.createDiv("ft-charts");
+
+    for (const ev of events) {
+      const evTxns = all.filter((t) => t.event === ev.id);
+      const spent = evTxns
+        .filter((t) => t.type === "expense" || t.type === "investment")
+        .reduce((s, t) => s + t.amount, 0);
+      const target = ev.target ?? 0;
+      const pct = target > 0 ? (spent / target) * 100 : 0;
+      const over = target > 0 && spent > target;
+
+      const box = grid.createDiv("ft-chart-box");
+      const head = box.createDiv("ft-event-head");
+      head.createEl("h3", { text: `${ev.name}` });
+      head.createSpan({ cls: "ft-event-status ft-status-" + ev.status, text: EVENT_STATUS_LABELS[ev.status] });
+
+      const meta: string[] = [];
+      if (ev.startDate) meta.push(ev.startDate + (ev.endDate ? " → " + ev.endDate : ""));
+      if (!ev.capital) meta.push("counts in monthly");
+      box.createDiv({ cls: "setting-item-description", text: meta.join(" · ") });
+
+      box.createDiv({
+        cls: "ft-event-figures",
+        text:
+          `Spent ${formatCurrency(spent, this.plugin.settings)}` +
+          (target > 0
+            ? ` of ${formatCurrency(target, this.plugin.settings)} · ${
+                over
+                  ? formatCurrency(spent - target, this.plugin.settings) + " over"
+                  : formatCurrency(target - spent, this.plugin.settings) + " left"
+              } (${pct.toFixed(0)}%)`
+            : ""),
+      });
+
+      if (target > 0) {
+        const track = box.createDiv("ft-budget-track");
+        const fill = track.createDiv("ft-budget-fill");
+        fill.style.width = Math.min(pct, 100) + "%";
+        if (over) fill.addClass("ft-over");
+        else if (pct >= 80) fill.addClass("ft-warn");
+      }
+
+      // category breakdown
+      const byCat = new Map<string, number>();
+      evTxns.filter((t) => t.type === "expense" || t.type === "investment").forEach((t) => {
+        byCat.set(t.category, (byCat.get(t.category) ?? 0) + t.amount);
+      });
+      const cats = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]);
+      if (cats.length) {
+        const tbl = box.createEl("table", { cls: "ft-table" });
+        const hr = tbl.createEl("thead").createEl("tr");
+        ["Category", "Amount", "Share"].forEach((h) => hr.createEl("th", { text: h }));
+        const tb = tbl.createEl("tbody");
+        for (const [c, v] of cats) {
+          const tr = tb.createEl("tr");
+          tr.createEl("td", { text: c });
+          tr.createEl("td", { text: formatCurrency(v, this.plugin.settings) }).addClass("ft-amount");
+          tr.createEl("td", { text: `${spent ? ((v / spent) * 100).toFixed(0) : 0}%` }).addClass("ft-amount");
+        }
+      } else {
+        box.createDiv({ cls: "ft-empty", text: "No transactions tagged to this event yet." });
+      }
+    }
+  }
+
   // ── Insights tab: a collection of meaningful charts ─────────────
   private renderInsights(root: HTMLElement) {
     // range selector
@@ -845,7 +954,9 @@ export class FinanceDashboardView extends ItemView {
     });
 
     const range = this.currentRange();
-    const inScope = this.plugin.store.getAll().filter((t) => inRange(t.date, range));
+    const inScope = this.nonCapital(
+      this.plugin.store.getAll().filter((t) => inRange(t.date, range))
+    );
     if (inScope.length === 0) {
       root.createDiv({ cls: "ft-empty", text: "No data in this range." });
       return;
