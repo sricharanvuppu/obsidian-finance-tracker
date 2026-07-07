@@ -583,7 +583,13 @@ export class FinanceDashboardView extends ItemView {
     const savings = income - expense; // savings = income not consumed; investing is a use of savings
     const savingsRate = income > 0 ? (savings / income) * 100 : 0;
     const lendingCash = lendingNetCashInRange(this.plugin.store.getLoans(), this.currentRange());
-    const netCash = income - expense - investment + lendingCash; // change in liquid cash this period
+    // Net cash flow is a true liquid-cash metric, so it counts EVERYTHING that
+    // moved cash — including capital events (they go out of your income too).
+    const netCash =
+      sumByType(txns, "income") -
+      sumByType(txns, "expense") -
+      sumByType(txns, "investment") +
+      lendingCash;
 
     const cap = this.capitalEventIds();
     const capitalSpend = txns
@@ -591,21 +597,28 @@ export class FinanceDashboardView extends ItemView {
       .reduce((s, t) => s + t.amount, 0);
 
     const cards = root.createDiv("ft-cards");
-    const card = (label: string, value: number, cls: string, extra?: string) => {
+    const card = (label: string, value: number, cls: string, extra?: string, tooltip?: string) => {
       const c = cards.createDiv("ft-card " + cls);
+      if (tooltip) { c.setAttr("aria-label", tooltip); c.setAttr("title", tooltip); }
       c.createDiv({ cls: "ft-card-label", text: label });
       c.createDiv({ cls: "ft-card-value", text: formatCurrency(value, this.plugin.settings) });
       if (extra) c.createDiv({ cls: "ft-card-extra", text: extra });
     };
-    card("Income", income, "ft-income");
-    card("Expense", expense, "ft-expense");
-    card("Investment", investment, "ft-investment");
+    card("Income", income, "ft-income", undefined,
+      "Income received in this range (excludes capital-event income and loan repayments).");
+    card("Expense", expense, "ft-expense", "Everyday spending only",
+      "Counts only regular monthly expenses. Excludes capital events (weddings, home, etc.), investments, and money lent out — those are tracked separately.");
+    card("Investment", investment, "ft-investment", undefined,
+      "Money moved into investments this range (excludes capital-event spend).");
     card("Savings", savings, savings >= 0 ? "ft-savings" : "ft-negative",
-      `Savings rate ${savingsRate.toFixed(0)}%`);
+      `Savings rate ${savingsRate.toFixed(0)}%`,
+      "Income − everyday Expense. Excludes capital events, investments and lending.");
     card("Net cash flow", netCash, netCash >= 0 ? "ft-netcash" : "ft-negative",
-      lendingCash !== 0 ? "Incl. lending activity" : "Income − Expense − Investment");
+      capitalSpend > 0 ? "Incl. capital events & lending" : (lendingCash !== 0 ? "Incl. lending activity" : "Income − Expense − Investment"),
+      "Actual change in liquid cash: all income minus all expenses, investments, capital events, and net lending. This is the true cash movement (matches your account balances).");
     if (capitalSpend > 0) {
-      card("Capital events", capitalSpend, "ft-capital", "Excluded from monthly analysis");
+      card("Capital events", capitalSpend, "ft-capital", "Excluded from monthly analysis",
+        "One-off life events (wedding, home, baby). Not counted in Expense/Savings, but they do reduce your account balances and net worth.");
     }
 
     this.renderBalances(root);
