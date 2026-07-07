@@ -1033,7 +1033,10 @@ export class FinanceDashboardView extends ItemView {
         box.createEl("h4", { text: "Transactions", cls: "ft-event-txn-title" });
         const tt = box.createEl("table", { cls: "ft-table" });
         const thr = tt.createEl("thead").createEl("tr");
-        ["Date", "Category", "Amount", ""].forEach((h) => thr.createEl("th", { text: h }));
+        ["Date", "Category", "Amount", ""].forEach((h) => {
+          const th = thr.createEl("th", { text: h });
+          if (h === "Amount") th.addClass("ft-col-amount");
+        });
         const tbb = tt.createEl("tbody");
         const sorted = [...evTxns].sort((a, b) => (a.date < b.date ? 1 : -1));
         for (const t of sorted) {
