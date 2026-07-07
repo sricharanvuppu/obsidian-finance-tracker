@@ -1,4 +1,4 @@
-import { Plugin, WorkspaceLeaf, Notice } from "obsidian";
+import { Plugin, WorkspaceLeaf, Notice, normalizePath } from "obsidian";
 import { DEFAULT_SETTINGS, FinanceSettings } from "./types";
 import { FinanceStore } from "./store";
 import { AddTransactionModal } from "./AddTransactionModal";
@@ -78,6 +78,17 @@ export default class FinanceTrackerPlugin extends Plugin {
     });
 
     this.addSettingTab(new FinanceSettingTab(this.app, this));
+
+    // Live-refresh when the data file changes on disk (e.g. after a sync on
+    // another device, or an external edit). Covers modify/create/rename.
+    const onFileChange = (file: { path: string }) => {
+      if (file.path === normalizePath(this.settings.dataFilePath)) {
+        this.reloadIfChanged();
+      }
+    };
+    this.registerEvent(this.app.vault.on("modify", onFileChange));
+    this.registerEvent(this.app.vault.on("create", onFileChange));
+    this.registerEvent(this.app.vault.on("rename", onFileChange));
   }
 
   onunload() {
@@ -89,6 +100,37 @@ export default class FinanceTrackerPlugin extends Plugin {
       const view = leaf.view;
       if (view instanceof FinanceDashboardView) view.refresh();
     });
+  }
+
+  private reloadTimer: number | null = null;
+
+  /**
+   * Reloads the data file from disk if it differs from what we hold in memory,
+   * then refreshes any open dashboards. Debounced, and ignores changes that
+   * merely match our own last write (so it doesn't loop on self-saves).
+   */
+  private reloadIfChanged() {
+    if (this.reloadTimer) window.clearTimeout(this.reloadTimer);
+    this.reloadTimer = window.setTimeout(async () => {
+      try {
+        const path = normalizePath(this.settings.dataFilePath);
+        if (!(await this.app.vault.adapter.exists(path))) return;
+        const raw = await this.app.vault.adapter.read(path);
+        let incoming: string;
+        try {
+          incoming = JSON.stringify(JSON.parse(raw));
+        } catch {
+          return; // file mid-write / invalid JSON; ignore this event
+        }
+        const inMemory = JSON.stringify(this.store.data);
+        if (incoming === inMemory) return; // our own save — nothing to do
+        await this.store.load();
+        await this.reconcileConfig();
+        this.refreshDashboards();
+      } catch (e) {
+        console.error("Finance Tracker: reloadIfChanged failed", e);
+      }
+    }, 400);
   }
 
   /**
