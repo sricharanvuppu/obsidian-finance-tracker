@@ -904,17 +904,6 @@ export class FinanceDashboardView extends ItemView {
     // ── Overview charts across all events ──
     const overview = root.createDiv("ft-charts");
 
-    // Spend by event (pie)
-    const spendEntries = events
-      .map((ev) => [ev.name, spentOf(ev.id)] as [string, number])
-      .filter((e) => e[1] > 0)
-      .sort((a, b) => b[1] - a[1]);
-    if (spendEntries.length) {
-      const box = overview.createDiv("ft-chart-box");
-      box.createEl("h3", { text: "Spend by event" });
-      this.makePie(box.createEl("canvas"), spendEntries);
-    }
-
     // Budget vs actual across events (events that have a target)
     const budgeted = events.filter((ev) => (ev.target ?? 0) > 0);
     if (budgeted.length) {
