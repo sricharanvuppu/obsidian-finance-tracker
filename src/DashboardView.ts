@@ -851,6 +851,9 @@ export class FinanceDashboardView extends ItemView {
       return;
     }
 
+    // ── Spending-health alert cards ──
+    this.renderSpendingAlerts(root, inScope);
+
     const months = Array.from(new Set(inScope.map((t) => monthKey(t.date)))).sort();
     const labels = months.map(monthLabel);
     const bucket = (type: TxnType) =>
@@ -933,6 +936,136 @@ export class FinanceDashboardView extends ItemView {
     this.makeLine(grid.createDiv("ft-chart-box"), "Cumulative savings", labels, [
       { label: "Cumulative savings", data: cumulativeArr, borderColor: "#4e79a7", backgroundColor: "#4e79a7", tension: 0.3, pointRadius: 3, fill: false },
     ]);
+
+    // 7. Top spending categories (horizontal bar, share of total)
+    if (expByCat.length) {
+      const totalExp = expByCat.reduce((s, e) => s + e[1], 0);
+      const top = expByCat.slice(0, 8);
+      this.makeBars(
+        grid.createDiv("ft-chart-box"),
+        "Top spending categories",
+        top.map((e) => `${e[0]} (${((e[1] / totalExp) * 100).toFixed(0)}%)`),
+        [{ label: "Spent", data: top.map((e) => e[1]), backgroundColor: top.map((_, i) => PALETTE[i % PALETTE.length]) }],
+        { horizontal: true }
+      );
+    }
+
+    // 8. Expense-to-income ratio over time (line, % + 100% reference)
+    const ratioArr = months.map((_, i) =>
+      incomeArr[i] > 0 ? Math.round((expenseArr[i] / incomeArr[i]) * 100) : 0
+    );
+    this.makeLine(
+      grid.createDiv("ft-chart-box"),
+      "Expense-to-income ratio",
+      labels,
+      [
+        { label: "Expense ratio", data: ratioArr, borderColor: "#e15759", backgroundColor: "#e15759", tension: 0.3, pointRadius: 3 },
+        { label: "100% (all income)", data: months.map(() => 100), borderColor: "#bab0ac", borderDash: [6, 6], pointRadius: 0, fill: false },
+      ],
+      { percent: true }
+    );
+
+    // 9. Category change vs previous month (what's driving the increase)
+    if (months.length >= 2) {
+      const cur = months[months.length - 1];
+      const prev = months[months.length - 2];
+      const expFor = (mk: string) => {
+        const m = new Map<string, number>();
+        inScope.filter((t) => t.type === "expense" && monthKey(t.date) === mk).forEach((t) => m.set(t.category, (m.get(t.category) ?? 0) + t.amount));
+        return m;
+      };
+      const cm = expFor(cur), pm = expFor(prev);
+      const cats = new Set<string>([...cm.keys(), ...pm.keys()]);
+      const deltas = Array.from(cats)
+        .map((c) => [c, (cm.get(c) ?? 0) - (pm.get(c) ?? 0)] as [string, number])
+        .filter((d) => Math.abs(d[1]) > 0)
+        .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))
+        .slice(0, 8);
+      if (deltas.length) {
+        this.makeBars(
+          grid.createDiv("ft-chart-box"),
+          `Category change: ${monthLabel(cur)} vs ${monthLabel(prev)}`,
+          deltas.map((d) => d[0]),
+          [{ label: "Change", data: deltas.map((d) => d[1]), backgroundColor: deltas.map((d) => (d[1] > 0 ? "#e15759" : "#59a14f")) }],
+          { horizontal: true }
+        );
+      }
+    }
+
+    // 10. Biggest expenses (top 10 table)
+    const biggest = inScope
+      .filter((t) => t.type === "expense")
+      .sort((a, b) => b.amount - a.amount)
+      .slice(0, 10);
+    if (biggest.length) {
+      const box = grid.createDiv("ft-chart-box");
+      box.createEl("h3", { text: "Biggest expenses" });
+      const table = box.createEl("table", { cls: "ft-table" });
+      const hr = table.createEl("thead").createEl("tr");
+      ["Date", "Category", "Amount"].forEach((h) => hr.createEl("th", { text: h }));
+      const tb = table.createEl("tbody");
+      for (const t of biggest) {
+        const tr = tb.createEl("tr");
+        tr.createEl("td", { text: t.date });
+        tr.createEl("td", { text: `${t.category}${t.subcategory ? " › " + t.subcategory : ""}` });
+        tr.createEl("td", { text: formatCurrency(t.amount, this.plugin.settings) }).addClass("ft-amount", "ft-type-expense");
+      }
+    }
+  }
+
+  /** Alert cards that make overspending obvious for the selected range. */
+  private renderSpendingAlerts(root: HTMLElement, inScope: Transaction[]) {
+    const income = sumByType(inScope, "income");
+    const expense = sumByType(inScope, "expense");
+    const ratio = income > 0 ? (expense / income) * 100 : 0;
+    const expByCat = this.groupByCategory(inScope, "expense");
+    const topCat = expByCat[0];
+    const topShare = expByCat.length ? (topCat[1] / expense) * 100 : 0;
+
+    // over-budget for the most recent month in scope
+    const months = Array.from(new Set(inScope.map((t) => monthKey(t.date)))).sort();
+    const lastMonth = months[months.length - 1];
+    const budgets = this.plugin.settings.budgets || {};
+    let overCount = 0, overAmount = 0;
+    for (const cat of Object.keys(budgets)) {
+      const actual = inScope
+        .filter((t) => t.type === "expense" && t.category === cat && monthKey(t.date) === lastMonth)
+        .reduce((s, t) => s + t.amount, 0);
+      if (actual > budgets[cat]) { overCount++; overAmount += actual - budgets[cat]; }
+    }
+
+    // this month vs average month expense
+    const monthlyExp = months.map((mk) =>
+      inScope.filter((t) => t.type === "expense" && monthKey(t.date) === mk).reduce((s, t) => s + t.amount, 0)
+    );
+    const avgExp = monthlyExp.length ? monthlyExp.reduce((s, v) => s + v, 0) / monthlyExp.length : 0;
+    const lastExp = monthlyExp[monthlyExp.length - 1] ?? 0;
+    const vsAvg = avgExp > 0 ? ((lastExp - avgExp) / avgExp) * 100 : 0;
+
+    const cards = root.createDiv("ft-cards");
+    const card = (label: string, value: string, cls: string, extra?: string) => {
+      const c = cards.createDiv("ft-card " + cls);
+      c.createDiv({ cls: "ft-card-label", text: label });
+      c.createDiv({ cls: "ft-card-value", text: value });
+      if (extra) c.createDiv({ cls: "ft-card-extra", text: extra });
+    };
+
+    const ratioCls = ratio >= 100 ? "ft-negative" : ratio >= 85 ? "ft-expense" : "ft-savings";
+    card("Expense-to-income", `${ratio.toFixed(0)}%`, ratioCls,
+      ratio >= 100 ? "Spending more than you earn!" : ratio >= 85 ? "Running tight" : "Healthy");
+
+    card("Over budget", overCount > 0 ? `${overCount} categories` : "On track",
+      overCount > 0 ? "ft-negative" : "ft-savings",
+      overCount > 0 ? `${formatCurrency(overAmount, this.plugin.settings)} over (${monthLabel(lastMonth)})` : monthLabel(lastMonth));
+
+    if (topCat) {
+      card("Top category", topCat[0], "ft-investment",
+        `${topShare.toFixed(0)}% of spend · ${formatCurrency(topCat[1], this.plugin.settings)}`);
+    }
+
+    card(`${monthLabel(lastMonth)} vs avg`, `${vsAvg >= 0 ? "+" : ""}${vsAvg.toFixed(0)}%`,
+      vsAvg > 15 ? "ft-negative" : vsAvg < -5 ? "ft-savings" : "ft-netcash",
+      vsAvg > 15 ? "Spending spiked" : "vs your average month");
   }
 
   private groupByCategory(txns: Transaction[], type: TxnType): [string, number][] {
@@ -948,39 +1081,43 @@ export class FinanceDashboardView extends ItemView {
     title: string,
     labels: string[],
     datasets: any[],
-    opts?: { stacked?: boolean; percent?: boolean }
+    opts?: { stacked?: boolean; percent?: boolean; horizontal?: boolean }
   ) {
     box.createEl("h3", { text: title });
     const canvas = box.createEl("canvas");
+    const fmt = (v: number) =>
+      opts?.percent ? v.toFixed(0) + "%" : formatCurrency(v, this.plugin.settings);
     this.charts.push(
       new Chart(canvas, {
         type: "bar",
         data: { labels, datasets },
         options: {
+          indexAxis: opts?.horizontal ? "y" : "x",
           responsive: true,
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           plugins: {
-            legend: { position: "top", labels: { boxWidth: 12 } },
+            legend: { display: datasets.length > 1, position: "top", labels: { boxWidth: 12 } },
             tooltip: {
               callbacks: {
                 label: (ctx: any) =>
-                  `${ctx.dataset.label}: ${
-                    opts?.percent
-                      ? (ctx.parsed.y as number).toFixed(0) + "%"
-                      : formatCurrency(ctx.parsed.y as number, this.plugin.settings)
-                  }`,
+                  `${ctx.dataset.label}: ${fmt(Number(opts?.horizontal ? ctx.parsed.x : ctx.parsed.y))}`,
               },
             },
           },
           scales: {
-            x: { stacked: !!opts?.stacked },
+            x: {
+              stacked: !!opts?.stacked,
+              beginAtZero: true,
+              ticks: {
+                callback: (v: any) => (opts?.horizontal ? fmt(Number(v)) : v),
+              },
+            },
             y: {
               stacked: !!opts?.stacked,
               beginAtZero: true,
               ticks: {
-                callback: (v: any) =>
-                  opts?.percent ? v + "%" : formatCurrency(Number(v), this.plugin.settings),
+                callback: (v: any) => (opts?.horizontal ? v : fmt(Number(v))),
               },
             },
           },
