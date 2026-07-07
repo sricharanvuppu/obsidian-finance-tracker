@@ -896,52 +896,6 @@ export class FinanceDashboardView extends ItemView {
     }
 
     const all = this.plugin.store.getAll();
-    const spentOf = (evId: string) =>
-      all
-        .filter((t) => t.event === evId && (t.type === "expense" || t.type === "investment"))
-        .reduce((s, t) => s + t.amount, 0);
-
-    // ── Overview charts across all events ──
-    const overview = root.createDiv("ft-charts");
-
-    // Budget vs actual across events (events that have a target)
-    const budgeted = events.filter((ev) => (ev.target ?? 0) > 0);
-    if (budgeted.length) {
-      this.makeBars(
-        overview.createDiv("ft-chart-box"),
-        "Budget vs actual (by event)",
-        budgeted.map((ev) => ev.name),
-        [
-          { label: "Spent", data: budgeted.map((ev) => spentOf(ev.id)), backgroundColor: "#e15759" },
-          { label: "Target", data: budgeted.map((ev) => ev.target ?? 0), backgroundColor: "#4e79a7" },
-        ],
-        { horizontal: true }
-      );
-    }
-
-    // Event spend over time (stacked bars per event across months)
-    const evAll = all.filter((t) => t.event && (t.type === "expense" || t.type === "investment"));
-    const evMonths = Array.from(new Set(evAll.map((t) => monthKey(t.date)))).sort();
-    const spendingEvents = events.filter((ev) => spentOf(ev.id) > 0);
-    if (evMonths.length && spendingEvents.length) {
-      const datasets = spendingEvents.map((ev, i) => ({
-        label: ev.name,
-        data: evMonths.map((mk) =>
-          evAll
-            .filter((t) => t.event === ev.id && monthKey(t.date) === mk)
-            .reduce((s, t) => s + t.amount, 0)
-        ),
-        backgroundColor: PALETTE[i % PALETTE.length],
-      }));
-      this.makeBars(
-        overview.createDiv("ft-chart-box"),
-        "Event spend over time",
-        evMonths.map(monthLabel),
-        datasets,
-        { stacked: true }
-      );
-    }
-
     const grid = root.createDiv("ft-charts");
 
     for (const ev of events) {
