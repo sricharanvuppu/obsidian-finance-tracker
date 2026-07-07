@@ -67,10 +67,37 @@ const PALETTE = [
   "#86bcb6", "#d37295", "#fabfd2", "#8cd17d", "#b6992d",
 ];
 
+/** Inline Chart.js plugin that draws each slice's percentage on pie charts. */
+const percentLabelPlugin = {
+  id: "ftPercentLabels",
+  afterDatasetsDraw(chart: any) {
+    const ds = chart.data?.datasets?.[0];
+    if (!ds) return;
+    const data: number[] = ds.data || [];
+    const total = data.reduce((s, v) => s + (Number(v) || 0), 0);
+    if (!total) return;
+    const meta = chart.getDatasetMeta(0);
+    const ctx = chart.ctx;
+    ctx.save();
+    ctx.font = "bold 11px var(--font-interface, sans-serif)";
+    ctx.fillStyle = "#ffffff";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    meta.data.forEach((arc: any, i: number) => {
+      const v = Number(data[i]) || 0;
+      const pct = (v / total) * 100;
+      if (pct < 5) return; // skip tiny slices to avoid clutter
+      const pos = arc.tooltipPosition();
+      ctx.fillText(pct.toFixed(0) + "%", pos.x, pos.y);
+    });
+    ctx.restore();
+  },
+};
+
 export class FinanceDashboardView extends ItemView {
   private plugin: FinanceTrackerPlugin;
 
-  private mode: "dashboard" | "yearly" | "budget" | "lending" = "dashboard";
+  private mode: "dashboard" | "yearly" | "budget" | "lending" | "insights" = "dashboard";
   private preset: RangePreset = "this-month";
   private custom: DateRange | null = null;
   private typeFilter: "all" | TxnType = "all";
@@ -81,8 +108,7 @@ export class FinanceDashboardView extends ItemView {
   private sortDir: "asc" | "desc" = "desc";
   private budgetMonth: string = monthKey(toISO(new Date()));
 
-  private pieChart: Chart | null = null;
-  private trendChart: Chart | null = null;
+  private charts: Chart[] = [];
 
   constructor(leaf: WorkspaceLeaf, plugin: FinanceTrackerPlugin) {
     super(leaf);
@@ -108,10 +134,8 @@ export class FinanceDashboardView extends ItemView {
   }
 
   private destroyCharts() {
-    this.pieChart?.destroy();
-    this.trendChart?.destroy();
-    this.pieChart = null;
-    this.trendChart = null;
+    this.charts.forEach((c) => c.destroy());
+    this.charts = [];
   }
 
   public refresh() {
@@ -165,6 +189,10 @@ export class FinanceDashboardView extends ItemView {
       this.renderLending(root);
       return;
     }
+    if (this.mode === "insights") {
+      this.renderInsights(root);
+      return;
+    }
 
     this.renderToolbar(root);
     const txns = this.filtered();
@@ -181,6 +209,7 @@ export class FinanceDashboardView extends ItemView {
     const tabs = root.createDiv("ft-mode-tabs");
     const modes: { key: typeof this.mode; label: string }[] = [
       { key: "dashboard", label: "Dashboard" },
+      { key: "insights", label: "Insights" },
       { key: "yearly", label: "Yearly" },
       { key: "budget", label: "Budget" },
       { key: "lending", label: "Lending" },
@@ -669,7 +698,13 @@ export class FinanceDashboardView extends ItemView {
       return;
     }
 
-    this.pieChart = new Chart(canvas, {
+    this.makePie(canvas, entries);
+  }
+
+  /** Builds a pie chart with percentages on slices and in the legend. */
+  private makePie(canvas: HTMLCanvasElement, entries: [string, number][]) {
+    const total = entries.reduce((s, e) => s + e[1], 0);
+    const chart = new Chart(canvas, {
       type: "pie",
       data: {
         labels: entries.map((e) => e[0]),
@@ -685,12 +720,29 @@ export class FinanceDashboardView extends ItemView {
         responsive: true,
         maintainAspectRatio: false,
         plugins: {
-          legend: { position: "right", labels: { boxWidth: 12 } },
+          legend: {
+            position: "right",
+            labels: {
+              boxWidth: 12,
+              generateLabels: (c: any) => {
+                const ds = c.data.datasets[0];
+                return (c.data.labels || []).map((l: string, i: number) => {
+                  const v = Number(ds.data[i]) || 0;
+                  const pct = total ? ((v / total) * 100).toFixed(0) : "0";
+                  return {
+                    text: `${l} — ${pct}%`,
+                    fillStyle: (ds.backgroundColor as string[])[i],
+                    strokeStyle: "rgba(0,0,0,0)",
+                    index: i,
+                  };
+                });
+              },
+            },
+          },
           tooltip: {
             callbacks: {
-              label: (ctx) => {
+              label: (ctx: any) => {
                 const val = ctx.parsed as number;
-                const total = entries.reduce((s, e) => s + e[1], 0);
                 const pct = total ? ((val / total) * 100).toFixed(1) : "0";
                 return `${ctx.label}: ${formatCurrency(val, this.plugin.settings)} (${pct}%)`;
               },
@@ -698,7 +750,9 @@ export class FinanceDashboardView extends ItemView {
           },
         },
       },
+      plugins: [percentLabelPlugin],
     });
+    this.charts.push(chart);
   }
 
   // ── Trend: income vs expense vs investment + savings over months ─
@@ -731,7 +785,7 @@ export class FinanceDashboardView extends ItemView {
     const investArr = bucket("investment");
     const savingsArr = months.map((_, i) => incomeArr[i] - expenseArr[i]);
 
-    this.trendChart = new Chart(canvas, {
+    this.charts.push(new Chart(canvas, {
       type: "bar",
       data: {
         labels: months.map(monthLabel),
@@ -764,7 +818,219 @@ export class FinanceDashboardView extends ItemView {
           },
         },
       },
+    }));
+  }
+
+  // ── Insights tab: a collection of meaningful charts ─────────────
+  private renderInsights(root: HTMLElement) {
+    // range selector
+    const bar = root.createDiv("ft-toolbar");
+    const presets: { key: RangePreset; label: string }[] = [
+      { key: "this-month", label: "This Month" },
+      { key: "last-month", label: "Last Month" },
+      { key: "this-year", label: "This Year" },
+      { key: "last-year", label: "Last Year" },
+      { key: "all", label: "All" },
+    ];
+    const wrap = bar.createDiv("ft-presets");
+    presets.forEach((p) => {
+      const b = wrap.createEl("button", {
+        text: p.label,
+        cls: "ft-chip" + (this.preset === p.key ? " is-active" : ""),
+      });
+      b.onclick = () => {
+        this.preset = p.key;
+        this.render();
+      };
     });
+
+    const range = this.currentRange();
+    const inScope = this.plugin.store.getAll().filter((t) => inRange(t.date, range));
+    if (inScope.length === 0) {
+      root.createDiv({ cls: "ft-empty", text: "No data in this range." });
+      return;
+    }
+
+    const months = Array.from(new Set(inScope.map((t) => monthKey(t.date)))).sort();
+    const labels = months.map(monthLabel);
+    const bucket = (type: TxnType) =>
+      months.map((mk) =>
+        inScope
+          .filter((t) => t.type === type && monthKey(t.date) === mk)
+          .reduce((s, t) => s + t.amount, 0)
+      );
+    const incomeArr = bucket("income");
+    const expenseArr = bucket("expense");
+    const investArr = bucket("investment");
+    const savingsArr = months.map((_, i) => incomeArr[i] - expenseArr[i]);
+    const savingsRateArr = months.map((_, i) =>
+      incomeArr[i] > 0 ? Math.round(((incomeArr[i] - expenseArr[i]) / incomeArr[i]) * 100) : 0
+    );
+    let running = 0;
+    const cumulativeArr = savingsArr.map((s) => (running += s));
+
+    const grid = root.createDiv("ft-charts");
+
+    // 1. Expenses by category (pie with %)
+    const expByCat = this.groupByCategory(inScope, "expense");
+    if (expByCat.length) {
+      const box = grid.createDiv("ft-chart-box");
+      box.createEl("h3", { text: "Expenses by category" });
+      this.makePie(box.createEl("canvas"), expByCat);
+    }
+
+    // 2. Income by source (pie with %)
+    const incByCat = this.groupByCategory(inScope, "income");
+    if (incByCat.length) {
+      const box = grid.createDiv("ft-chart-box");
+      box.createEl("h3", { text: "Income by source" });
+      this.makePie(box.createEl("canvas"), incByCat);
+    }
+
+    // 3. Monthly cash flow (grouped bars)
+    this.makeBars(grid.createDiv("ft-chart-box"), "Monthly cash flow", labels, [
+      { label: "Income", data: incomeArr, backgroundColor: "#59a14f" },
+      { label: "Expense", data: expenseArr, backgroundColor: "#e15759" },
+      { label: "Savings", data: savingsArr, backgroundColor: "#edc948" },
+    ]);
+
+    // 4. Savings rate over time (line, %)
+    this.makeLine(grid.createDiv("ft-chart-box"), "Savings rate over time", labels, [
+      { label: "Savings rate", data: savingsRateArr, borderColor: "#edc948", backgroundColor: "#edc948", tension: 0.3, pointRadius: 3 },
+    ], { percent: true });
+
+    // 5. Spending by category over time (stacked bars)
+    const topCats = expByCat.slice(0, 6).map((e) => e[0]);
+    const catColors: Record<string, string> = {};
+    topCats.forEach((c, i) => (catColors[c] = PALETTE[i % PALETTE.length]));
+    const stackedDatasets = topCats.map((cat) => ({
+      label: cat,
+      data: months.map((mk) =>
+        inScope
+          .filter((t) => t.type === "expense" && t.category === cat && monthKey(t.date) === mk)
+          .reduce((s, t) => s + t.amount, 0)
+      ),
+      backgroundColor: catColors[cat],
+    }));
+    // "Other" bucket for remaining categories
+    const otherData = months.map((mk) =>
+      inScope
+        .filter((t) => t.type === "expense" && !topCats.includes(t.category) && monthKey(t.date) === mk)
+        .reduce((s, t) => s + t.amount, 0)
+    );
+    if (otherData.some((v) => v > 0)) {
+      stackedDatasets.push({ label: "Other", data: otherData, backgroundColor: "#bab0ac" });
+    }
+    this.makeBars(
+      grid.createDiv("ft-chart-box"),
+      "Spending by category over time",
+      labels,
+      stackedDatasets,
+      { stacked: true }
+    );
+
+    // 6. Cumulative savings (line)
+    this.makeLine(grid.createDiv("ft-chart-box"), "Cumulative savings", labels, [
+      { label: "Cumulative savings", data: cumulativeArr, borderColor: "#4e79a7", backgroundColor: "#4e79a7", tension: 0.3, pointRadius: 3, fill: false },
+    ]);
+  }
+
+  private groupByCategory(txns: Transaction[], type: TxnType): [string, number][] {
+    const m = new Map<string, number>();
+    txns.filter((t) => t.type === type).forEach((t) => {
+      m.set(t.category, (m.get(t.category) ?? 0) + t.amount);
+    });
+    return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
+  }
+
+  private makeBars(
+    box: HTMLElement,
+    title: string,
+    labels: string[],
+    datasets: any[],
+    opts?: { stacked?: boolean; percent?: boolean }
+  ) {
+    box.createEl("h3", { text: title });
+    const canvas = box.createEl("canvas");
+    this.charts.push(
+      new Chart(canvas, {
+        type: "bar",
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "top", labels: { boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: (ctx: any) =>
+                  `${ctx.dataset.label}: ${
+                    opts?.percent
+                      ? (ctx.parsed.y as number).toFixed(0) + "%"
+                      : formatCurrency(ctx.parsed.y as number, this.plugin.settings)
+                  }`,
+              },
+            },
+          },
+          scales: {
+            x: { stacked: !!opts?.stacked },
+            y: {
+              stacked: !!opts?.stacked,
+              beginAtZero: true,
+              ticks: {
+                callback: (v: any) =>
+                  opts?.percent ? v + "%" : formatCurrency(Number(v), this.plugin.settings),
+              },
+            },
+          },
+        },
+      })
+    );
+  }
+
+  private makeLine(
+    box: HTMLElement,
+    title: string,
+    labels: string[],
+    datasets: any[],
+    opts?: { percent?: boolean }
+  ) {
+    box.createEl("h3", { text: title });
+    const canvas = box.createEl("canvas");
+    this.charts.push(
+      new Chart(canvas, {
+        type: "line",
+        data: { labels, datasets },
+        options: {
+          responsive: true,
+          maintainAspectRatio: false,
+          interaction: { mode: "index", intersect: false },
+          plugins: {
+            legend: { position: "top", labels: { boxWidth: 12 } },
+            tooltip: {
+              callbacks: {
+                label: (ctx: any) =>
+                  `${ctx.dataset.label}: ${
+                    opts?.percent
+                      ? (ctx.parsed.y as number).toFixed(0) + "%"
+                      : formatCurrency(ctx.parsed.y as number, this.plugin.settings)
+                  }`,
+              },
+            },
+          },
+          scales: {
+            y: {
+              beginAtZero: true,
+              ticks: {
+                callback: (v: any) =>
+                  opts?.percent ? v + "%" : formatCurrency(Number(v), this.plugin.settings),
+              },
+            },
+          },
+        },
+      })
+    );
   }
 
   // ── Transactions table ───────────────────────────────────────────
