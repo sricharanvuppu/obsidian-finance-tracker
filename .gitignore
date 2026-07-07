@@ -1,0 +1,14 @@
+# Dependencies
+node_modules/
+
+# Build output (attached to GitHub Releases instead)
+main.js
+*.js.map
+
+# OS / editor
+.DS_Store
+.idea/
+.vscode/
+
+# Logs
+*.log
