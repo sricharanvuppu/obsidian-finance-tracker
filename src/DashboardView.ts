@@ -104,6 +104,7 @@ export class FinanceDashboardView extends ItemView {
   private typeFilter: "all" | TxnType = "all";
   private categoryFilter = "all";
   private accountFilter = "all";
+  private eventFilter = "all";
   private search = "";
   private sortKey: keyof Transaction = "date";
   private sortDir: "asc" | "desc" = "desc";
@@ -172,6 +173,11 @@ export class FinanceDashboardView extends ItemView {
           this.accountFilter === "all" ||
           t.account === this.accountFilter ||
           t.toAccount === this.accountFilter
+      )
+      .filter(
+        (t) =>
+          this.eventFilter === "all" ||
+          (this.eventFilter === "none" ? !t.event : t.event === this.eventFilter)
       )
       .filter(
         (t) =>
@@ -537,6 +543,23 @@ export class FinanceDashboardView extends ItemView {
       });
       acctSel.onchange = () => {
         this.accountFilter = acctSel.value;
+        this.render();
+      };
+    }
+
+    // event filter
+    const events = this.plugin.settings.events || [];
+    if (events.length > 0) {
+      const evSel = filters.createEl("select");
+      evSel.createEl("option", { text: "All events", value: "all" });
+      evSel.createEl("option", { text: "— No event —", value: "none" });
+      events.forEach((e) => {
+        const opt = evSel.createEl("option", { text: e.name, value: e.id });
+        if (e.id === this.eventFilter) opt.selected = true;
+      });
+      if (this.eventFilter !== "all") evSel.value = this.eventFilter;
+      evSel.onchange = () => {
+        this.eventFilter = evSel.value;
         this.render();
       };
     }
@@ -926,6 +949,33 @@ export class FinanceDashboardView extends ItemView {
         }
       } else {
         box.createDiv({ cls: "ft-empty", text: "No transactions tagged to this event yet." });
+      }
+
+      // editable list of this event's transactions
+      if (evTxns.length) {
+        box.createEl("h4", { text: "Transactions", cls: "ft-event-txn-title" });
+        const tt = box.createEl("table", { cls: "ft-table" });
+        const thr = tt.createEl("thead").createEl("tr");
+        ["Date", "Category", "Amount", ""].forEach((h) => thr.createEl("th", { text: h }));
+        const tbb = tt.createEl("tbody");
+        const sorted = [...evTxns].sort((a, b) => (a.date < b.date ? 1 : -1));
+        for (const t of sorted) {
+          const tr = tbb.createEl("tr");
+          tr.createEl("td", { text: t.time ? `${t.date} ${t.time}` : t.date }).addClass("ft-col-date");
+          tr.createEl("td", { text: `${t.category}${t.subcategory ? " › " + t.subcategory : ""}` });
+          tr.createEl("td", { text: formatCurrency(t.amount, this.plugin.settings) }).addClass("ft-amount", "ft-type-" + t.type);
+          const act = tr.createEl("td");
+          const edit = act.createEl("button", { text: "✎", cls: "ft-icon-btn" });
+          edit.setAttr("aria-label", "Edit");
+          edit.onclick = () =>
+            new AddTransactionModal(this.app, this.plugin, () => this.refresh(), t).open();
+          const del = act.createEl("button", { text: "🗑", cls: "ft-icon-btn" });
+          del.setAttr("aria-label", "Delete");
+          del.onclick = async () => {
+            await this.plugin.store.remove(t.id);
+            this.refresh();
+          };
+        }
       }
     }
   }

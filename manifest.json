@@ -1,7 +1,7 @@
 {
   "id": "finance-tracker",
   "name": "Finance Tracker",
-  "version": "1.0.7",
+  "version": "1.0.8",
   "minAppVersion": "1.4.0",
   "description": "Track income, expenses, investments and savings. One-click entry, configurable categories, and a visual dashboard with pie and trend charts, date-range filtering and aggregation.",
   "author": "Custom",
