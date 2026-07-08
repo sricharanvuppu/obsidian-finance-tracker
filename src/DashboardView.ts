@@ -144,6 +144,17 @@ export class FinanceDashboardView extends ItemView {
     this.render();
   }
 
+  /** Obsidian's current theme text color, for chart legends/axes. */
+  private textColor(): string {
+    const c = getComputedStyle(this.contentEl).getPropertyValue("--text-normal").trim();
+    return c || "#dcddde";
+  }
+
+  private gridColor(): string {
+    const c = getComputedStyle(this.contentEl).getPropertyValue("--background-modifier-border").trim();
+    return c || "rgba(128,128,128,0.2)";
+  }
+
   private currentRange(): DateRange {
     return computeRange(this.preset, this.plugin.store.getAll(), this.custom ?? undefined);
   }
@@ -786,6 +797,7 @@ export class FinanceDashboardView extends ItemView {
             position: "right",
             labels: {
               boxWidth: 12,
+              color: this.textColor(),
               generateLabels: (c: any) => {
                 const ds = c.data.datasets[0];
                 return (c.data.labels || []).map((l: string, i: number) => {
@@ -863,7 +875,7 @@ export class FinanceDashboardView extends ItemView {
         maintainAspectRatio: false,
         interaction: { mode: "index", intersect: false },
         plugins: {
-          legend: { position: "top", labels: { boxWidth: 12 } },
+          legend: { position: "top", labels: { boxWidth: 12, color: this.textColor() } },
           tooltip: {
             callbacks: {
               label: (ctx) =>
@@ -875,9 +887,12 @@ export class FinanceDashboardView extends ItemView {
           y: {
             beginAtZero: true,
             ticks: {
+              color: this.textColor(),
               callback: (v) => formatCurrency(Number(v), this.plugin.settings),
             },
+            grid: { color: this.gridColor() },
           },
+          x: { ticks: { color: this.textColor() }, grid: { color: this.gridColor() } },
         },
       },
     }));
@@ -1272,7 +1287,7 @@ export class FinanceDashboardView extends ItemView {
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           plugins: {
-            legend: { display: datasets.length > 1, position: "top", labels: { boxWidth: 12 } },
+            legend: { display: datasets.length > 1, position: "top", labels: { boxWidth: 12, color: this.textColor() } },
             tooltip: {
               callbacks: {
                 label: (ctx: any) =>
@@ -1285,15 +1300,19 @@ export class FinanceDashboardView extends ItemView {
               stacked: !!opts?.stacked,
               beginAtZero: true,
               ticks: {
+                color: this.textColor(),
                 callback: (v: any) => (opts?.horizontal ? fmt(Number(v)) : v),
               },
+              grid: { color: this.gridColor() },
             },
             y: {
               stacked: !!opts?.stacked,
               beginAtZero: true,
               ticks: {
+                color: this.textColor(),
                 callback: (v: any) => (opts?.horizontal ? v : fmt(Number(v))),
               },
+              grid: { color: this.gridColor() },
             },
           },
         },
@@ -1319,7 +1338,7 @@ export class FinanceDashboardView extends ItemView {
           maintainAspectRatio: false,
           interaction: { mode: "index", intersect: false },
           plugins: {
-            legend: { position: "top", labels: { boxWidth: 12 } },
+            legend: { position: "top", labels: { boxWidth: 12, color: this.textColor() } },
             tooltip: {
               callbacks: {
                 label: (ctx: any) =>
@@ -1335,10 +1354,13 @@ export class FinanceDashboardView extends ItemView {
             y: {
               beginAtZero: true,
               ticks: {
+                color: this.textColor(),
                 callback: (v: any) =>
                   opts?.percent ? v + "%" : formatCurrency(Number(v), this.plugin.settings),
               },
+              grid: { color: this.gridColor() },
             },
+            x: { ticks: { color: this.textColor() }, grid: { color: this.gridColor() } },
           },
         },
       })
