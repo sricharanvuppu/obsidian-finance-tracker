@@ -61,6 +61,36 @@ export class FinanceSettingTab extends PluginSettingTab {
         })
       );
 
+    new Setting(containerEl)
+      .setName("Monthly savings goal")
+      .setDesc("Target amount to save each month (income − expense). 0 to disable.")
+      .addText((t) => {
+        t.inputEl.type = "number";
+        t.inputEl.setAttr("min", "0");
+        t.setValue(String(this.plugin.settings.savingsGoal || 0));
+        t.onChange(async (v) => {
+          const n = parseFloat(v);
+          this.plugin.settings.savingsGoal = isNaN(n) || n < 0 ? 0 : n;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
+      .setName("Discretionary categories (Wants)")
+      .setDesc("Comma-separated expense categories treated as 'Wants' (e.g. Food & Dining, Entertainment, Shopping, Travel). Everything else counts as 'Needs'.")
+      .addTextArea((ta) => {
+        ta.inputEl.rows = 3;
+        ta.inputEl.addClass("ft-cat-textarea");
+        ta.setValue((this.plugin.settings.discretionary || []).join(", "));
+        ta.onChange(async (v) => {
+          this.plugin.settings.discretionary = v
+            .split(",")
+            .map((s) => s.trim())
+            .filter((s) => s.length > 0);
+          await this.plugin.saveSettings();
+        });
+      });
+
     containerEl.createEl("h3", { text: "Categories" });
     containerEl.createEl("p", {
       cls: "setting-item-description",

@@ -44,6 +44,7 @@ import { BudgetModal } from "./BudgetModal";
 import { AccountModal } from "./AccountModal";
 import { LoanModal } from "./LoanModal";
 import { EventModal } from "./EventModal";
+import { ImportModal } from "./ImportModal";
 import type FinanceTrackerPlugin from "./main";
 
 Chart.register(
@@ -285,6 +286,9 @@ export class FinanceDashboardView extends ItemView {
 
     const exportBtn = tabs.createEl("button", { text: "⤓ Export CSV", cls: "ft-chip" });
     exportBtn.onclick = () => this.exportCSV();
+
+    const importBtn = tabs.createEl("button", { text: "⤒ Import CSV", cls: "ft-chip" });
+    importBtn.onclick = () => new ImportModal(this.app, this.plugin, () => this.refresh()).open();
   }
 
   private async exportCSV() {
@@ -325,9 +329,10 @@ export class FinanceDashboardView extends ItemView {
     box.createEl("h3", { text: "Yearly totals" });
     const table = box.createEl("table", { cls: "ft-table" });
     const hr = table.createEl("thead").createEl("tr");
-    ["Year", "Income", "Expense", "Investment", "Savings", "Savings rate"].forEach((h) =>
-      hr.createEl("th", { text: h })
-    );
+    ["Year", "Income", "Expense", "Investment", "Savings", "Savings rate"].forEach((h) => {
+      const th = hr.createEl("th", { text: h });
+      if (h !== "Year") th.addClass("ft-col-amount");
+    });
     const tbody = table.createEl("tbody");
     for (const y of years) {
       const ytx = all.filter((t) => t.date.slice(0, 4) === y);
@@ -353,9 +358,10 @@ export class FinanceDashboardView extends ItemView {
     mbox.createEl("h3", { text: `Monthly breakdown — ${selYear}` });
     const mtable = mbox.createEl("table", { cls: "ft-table" });
     const mhr = mtable.createEl("thead").createEl("tr");
-    ["Month", "Income", "Expense", "Investment", "Savings"].forEach((h) =>
-      mhr.createEl("th", { text: h })
-    );
+    ["Month", "Income", "Expense", "Investment", "Savings"].forEach((h) => {
+      const th = mhr.createEl("th", { text: h });
+      if (h !== "Month") th.addClass("ft-col-amount");
+    });
     const mbody = mtable.createEl("tbody");
     for (let m = 0; m < 12; m++) {
       const mk = `${selYear}-${String(m + 1).padStart(2, "0")}`;
@@ -627,7 +633,67 @@ export class FinanceDashboardView extends ItemView {
         "One-off life events (wedding, home, baby). Not counted in Expense/Savings, but they do reduce your account balances and net worth.");
     }
 
+    this.renderProjection(root);
     this.renderBalances(root);
+  }
+
+  /** Run-rate projection + savings-goal progress (only for the current month). */
+  private renderProjection(root: HTMLElement) {
+    if (this.preset !== "this-month") return;
+    const now = new Date();
+    const ym = monthKey(toISO(now));
+    const monthTxns = this.nonCapital(this.plugin.store.getAll().filter((t) => monthKey(t.date) === ym));
+    if (monthTxns.length === 0 && (this.plugin.settings.savingsGoal ?? 0) <= 0) return;
+
+    const income = sumByType(monthTxns, "income");
+    const spend = sumByType(monthTxns, "expense");
+    const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
+    const dayOfMonth = now.getDate();
+    const projected = dayOfMonth > 0 ? (spend / dayOfMonth) * daysInMonth : spend;
+    const goal = this.plugin.settings.savingsGoal ?? 0;
+
+    const cards = root.createDiv("ft-cards");
+    const card = (label: string, value: string, cls: string, extra?: string, tip?: string) => {
+      const c = cards.createDiv("ft-card " + cls);
+      if (tip) { c.setAttr("aria-label", tip); c.setAttr("title", tip); }
+      c.createDiv({ cls: "ft-card-label", text: label });
+      c.createDiv({ cls: "ft-card-value", text: value });
+      if (extra) c.createDiv({ cls: "ft-card-extra", text: extra });
+    };
+
+    // Projected month-end spend at current pace
+    const overIncome = income > 0 && projected > income;
+    card(
+      "Projected spend",
+      formatCurrency(projected, this.plugin.settings),
+      overIncome ? "ft-negative" : "ft-expense",
+      `by month-end at current pace · ${dayOfMonth}/${daysInMonth} days` +
+        (income > 0 ? ` · vs ${formatCurrency(income, this.plugin.settings)} income` : ""),
+      "Estimated total spending for this month if you keep spending at the current daily rate."
+    );
+    if (overIncome) {
+      cards.createDiv("ft-card ft-negative").createDiv({
+        cls: "ft-card-label",
+        text: "⚠ On track to overspend",
+      });
+    }
+
+    // Savings goal progress
+    if (goal > 0) {
+      const savedSoFar = income - spend;
+      const pct = goal > 0 ? (savedSoFar / goal) * 100 : 0;
+      const c = cards.createDiv("ft-card ft-savings");
+      c.setAttr("title", "Your monthly savings target vs actual savings (income − expense) so far this month.");
+      c.createDiv({ cls: "ft-card-label", text: "Savings goal" });
+      c.createDiv({ cls: "ft-card-value", text: `${formatCurrency(Math.max(0, savedSoFar), this.plugin.settings)}` });
+      c.createDiv({ cls: "ft-card-extra", text: `of ${formatCurrency(goal, this.plugin.settings)} · ${pct.toFixed(0)}%` });
+      const track = c.createDiv("ft-budget-track");
+      const fill = track.createDiv("ft-budget-fill");
+      fill.style.width = Math.max(0, Math.min(pct, 100)) + "%";
+      if (savedSoFar < 0) fill.addClass("ft-over");
+      else if (pct >= 100) fill.addClass(""); // full = green default
+      else if (pct < 50) fill.addClass("ft-warn");
+    }
   }
 
   // ── Account balances (uses ALL transactions, not range-filtered) ──
@@ -733,9 +799,10 @@ export class FinanceDashboardView extends ItemView {
     box.createEl("h3", { text: "Loans" });
     const table = box.createEl("table", { cls: "ft-table" });
     const hr = table.createEl("thead").createEl("tr");
-    ["Person", "Direction", "Principal", "Outstanding", "Interest", "Rate", "Date", "Due", ""].forEach((h) =>
-      hr.createEl("th", { text: h })
-    );
+    ["Person", "Direction", "Principal", "Outstanding", "Interest", "Rate", "Date", "Due", ""].forEach((h) => {
+      const th = hr.createEl("th", { text: h });
+      if (["Principal", "Outstanding", "Interest", "Rate"].includes(h)) th.addClass("ft-col-amount");
+    });
     const tbody = table.createEl("tbody");
     for (const l of loans) {
       const outstanding = loanOutstanding(l);
@@ -1055,6 +1122,31 @@ export class FinanceDashboardView extends ItemView {
     // ── Spending-health alert cards ──
     this.renderSpendingAlerts(root, inScope);
 
+    // ── Needs vs Wants ──
+    const wants = new Set(this.plugin.settings.discretionary || []);
+    if (wants.size > 0) {
+      const expenses = inScope.filter((t) => t.type === "expense");
+      const wantSum = expenses.filter((t) => wants.has(t.category)).reduce((s, t) => s + t.amount, 0);
+      const needSum = expenses.filter((t) => !wants.has(t.category)).reduce((s, t) => s + t.amount, 0);
+      const totalNW = wantSum + needSum;
+      if (totalNW > 0) {
+        const nwCards = root.createDiv("ft-cards");
+        const wantPct = (wantSum / totalNW) * 100;
+        const c = nwCards.createDiv("ft-card " + (wantPct > 40 ? "ft-negative" : "ft-netcash"));
+        c.setAttr("title", "Share of spending on discretionary 'Wants' categories. Lower is generally healthier.");
+        c.createDiv({ cls: "ft-card-label", text: "Discretionary (Wants)" });
+        c.createDiv({ cls: "ft-card-value", text: `${wantPct.toFixed(0)}%` });
+        c.createDiv({ cls: "ft-card-extra", text: `${formatCurrency(wantSum, this.plugin.settings)} of ${formatCurrency(totalNW, this.plugin.settings)}` });
+
+        const box = root.createDiv("ft-chart-box");
+        box.createEl("h3", { text: "Needs vs Wants" });
+        this.makePie(box.createEl("canvas"), [
+          ["Needs", needSum],
+          ["Wants", wantSum],
+        ]);
+      }
+    }
+
     const months = Array.from(new Set(inScope.map((t) => monthKey(t.date)))).sort();
     const labels = months.map(monthLabel);
     const bucket = (type: TxnType) =>
@@ -1194,7 +1286,10 @@ export class FinanceDashboardView extends ItemView {
       box.createEl("h3", { text: "Biggest expenses" });
       const table = box.createEl("table", { cls: "ft-table" });
       const hr = table.createEl("thead").createEl("tr");
-      ["Date", "Category", "Amount"].forEach((h) => hr.createEl("th", { text: h }));
+      ["Date", "Category", "Amount"].forEach((h) => {
+        const th = hr.createEl("th", { text: h });
+        if (h === "Amount") th.addClass("ft-col-amount");
+      });
       const tb = table.createEl("tbody");
       for (const t of biggest) {
         const tr = tb.createEl("tr");

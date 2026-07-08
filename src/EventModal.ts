@@ -55,7 +55,10 @@ export class EventModal extends Modal {
     }
     const table = this.listEl.createEl("table", { cls: "ft-table" });
     const hr = table.createEl("thead").createEl("tr");
-    ["Event", "Status", "Spent", "Target", "Capital", ""].forEach((h) => hr.createEl("th", { text: h }));
+    ["Event", "Status", "Spent", "Target", "Capital", ""].forEach((h) => {
+      const th = hr.createEl("th", { text: h });
+      if (["Spent", "Target"].includes(h)) th.addClass("ft-col-amount");
+    });
     const tbody = table.createEl("tbody");
     for (const e of events) {
       const tr = tbody.createEl("tr");

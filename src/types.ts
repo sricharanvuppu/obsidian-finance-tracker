@@ -57,6 +57,8 @@ export interface FinanceData {
   budgets?: BudgetMap;
   recurring?: RecurringRule[];
   events?: LifeEvent[];
+  savingsGoal?: number; // monthly savings target
+  discretionary?: string[]; // expense category names treated as "wants"
 }
 
 export type LoanDirection = "lent" | "borrowed";
@@ -131,6 +133,8 @@ export interface FinanceSettings {
   budgets: BudgetMap;
   accounts: Account[];
   events: LifeEvent[];
+  savingsGoal: number;
+  discretionary: string[];
 }
 
 export const TYPE_LABELS: Record<TxnType, string> = {
@@ -181,4 +185,6 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   budgets: {},
   accounts: [],
   events: [],
+  savingsGoal: 0,
+  discretionary: [],
 };

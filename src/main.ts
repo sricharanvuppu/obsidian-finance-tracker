@@ -5,6 +5,7 @@ import { AddTransactionModal } from "./AddTransactionModal";
 import { RecurringModal } from "./RecurringModal";
 import { AccountModal } from "./AccountModal";
 import { LoanModal } from "./LoanModal";
+import { ImportModal } from "./ImportModal";
 import { FinanceDashboardView, VIEW_TYPE_FINANCE } from "./DashboardView";
 import { FinanceSettingTab } from "./settings";
 import { dueOccurrences } from "./util";
@@ -77,6 +78,14 @@ export default class FinanceTrackerPlugin extends Plugin {
       name: "Manage lending & borrowing",
       callback: () => {
         new LoanModal(this.app, this, () => this.refreshDashboards()).open();
+      },
+    });
+
+    this.addCommand({
+      id: "import-csv",
+      name: "Import transactions from CSV",
+      callback: () => {
+        new ImportModal(this.app, this, () => this.refreshDashboards()).open();
       },
     });
 
@@ -190,6 +199,8 @@ export default class FinanceTrackerPlugin extends Plugin {
     if (!Array.isArray(this.settings.recurring)) this.settings.recurring = [];
     if (!Array.isArray(this.settings.accounts)) this.settings.accounts = [];
     if (!Array.isArray(this.settings.events)) this.settings.events = [];
+    if (!Array.isArray(this.settings.discretionary)) this.settings.discretionary = [];
+    if (typeof this.settings.savingsGoal !== "number") this.settings.savingsGoal = 0;
     if (!this.settings.budgets || typeof this.settings.budgets !== "object") {
       this.settings.budgets = {};
     }
@@ -211,6 +222,8 @@ export default class FinanceTrackerPlugin extends Plugin {
       d.events = unionById(d.events ?? [], this.settings.events ?? []);
       d.budgets = { ...(this.settings.budgets ?? {}), ...(d.budgets ?? {}) };
       d.categories = d.categories ?? this.settings.categories ?? DEFAULT_SETTINGS.categories;
+      d.savingsGoal = d.savingsGoal ?? this.settings.savingsGoal ?? 0;
+      d.discretionary = d.discretionary ?? this.settings.discretionary ?? [];
       d.version = 2;
       await this.store.saveConfig();
     }
@@ -221,6 +234,8 @@ export default class FinanceTrackerPlugin extends Plugin {
     this.settings.budgets = d.budgets ?? {};
     this.settings.recurring = d.recurring ?? [];
     this.settings.events = d.events ?? [];
+    this.settings.savingsGoal = d.savingsGoal ?? 0;
+    this.settings.discretionary = d.discretionary ?? [];
   }
 
   async saveSettings() {
@@ -238,6 +253,8 @@ export default class FinanceTrackerPlugin extends Plugin {
       this.store.data.budgets = this.settings.budgets;
       this.store.data.recurring = this.settings.recurring;
       this.store.data.events = this.settings.events;
+      this.store.data.savingsGoal = this.settings.savingsGoal;
+      this.store.data.discretionary = this.settings.discretionary;
       if ((this.store.data.version ?? 1) < 2) this.store.data.version = 2;
       await this.store.saveConfig();
     }

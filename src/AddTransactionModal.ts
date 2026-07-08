@@ -1,6 +1,6 @@
 import { App, Modal, Notice, Setting } from "obsidian";
 import { Account, CategoryMap, CategoryType, Transaction, TxnType, TYPE_LABELS } from "./types";
-import { todayISO, nowTimeIST } from "./util";
+import { todayISO, nowTimeIST, formatCurrency } from "./util";
 import { PromptModal } from "./PromptModal";
 import type FinanceTrackerPlugin from "./main";
 
@@ -331,8 +331,27 @@ export class AddTransactionModal extends Modal {
       await this.plugin.store.add(payload);
       new Notice("Transaction added.");
     }
+    this.checkBudgetAlert(payload);
     this.onSaved();
     this.close();
+  }
+
+  /** Warns when an expense pushes its category over (or near) the monthly budget. */
+  private checkBudgetAlert(payload: Omit<Transaction, "id">) {
+    if (payload.type !== "expense") return;
+    const budget = this.plugin.settings.budgets?.[payload.category];
+    if (!budget || budget <= 0) return;
+    const ym = (payload.date || "").slice(0, 7);
+    const spent = this.plugin.store
+      .getAll()
+      .filter((t) => t.type === "expense" && t.category === payload.category && (t.date || "").slice(0, 7) === ym)
+      .reduce((s, t) => s + t.amount, 0);
+    const fmt = (n: number) => formatCurrency(n, this.plugin.settings);
+    if (spent > budget) {
+      new Notice(`⚠ Over budget — ${payload.category}: ${fmt(spent)} of ${fmt(budget)} this month (${fmt(spent - budget)} over).`, 8000);
+    } else if (spent >= budget * 0.8) {
+      new Notice(`${payload.category} nearing budget: ${fmt(spent)} of ${fmt(budget)} (${((spent / budget) * 100).toFixed(0)}%).`, 6000);
+    }
   }
 
   onClose() {

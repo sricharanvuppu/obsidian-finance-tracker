@@ -97,6 +97,8 @@ export class FinanceStore {
       budgets: parsed.budgets,
       recurring: parsed.recurring,
       events: parsed.events,
+      savingsGoal: parsed.savingsGoal,
+      discretionary: parsed.discretionary,
     };
   }
 
@@ -132,6 +134,8 @@ export class FinanceStore {
       budgets: cfg.budgets,
       recurring: cfg.recurring,
       events: cfg.events,
+      savingsGoal: cfg.savingsGoal,
+      discretionary: cfg.discretionary,
     };
   }
 
@@ -173,6 +177,8 @@ export class FinanceStore {
       budgets: this.data.budgets ?? {},
       recurring: this.data.recurring ?? [],
       events: this.data.events ?? [],
+      savingsGoal: this.data.savingsGoal ?? 0,
+      discretionary: this.data.discretionary ?? [],
     };
     await this.writeFile(this.configPath, JSON.stringify(cfg, null, 2));
   }

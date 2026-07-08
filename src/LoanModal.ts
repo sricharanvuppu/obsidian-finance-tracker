@@ -55,9 +55,10 @@ export class LoanModal extends Modal {
     }
     const table = this.listEl.createEl("table", { cls: "ft-table" });
     const hr = table.createEl("thead").createEl("tr");
-    ["Person", "Dir", "Principal", "Outstanding", "Interest", "Due", ""].forEach((h) =>
-      hr.createEl("th", { text: h })
-    );
+    ["Person", "Dir", "Principal", "Outstanding", "Interest", "Due", ""].forEach((h) => {
+      const th = hr.createEl("th", { text: h });
+      if (["Principal", "Outstanding", "Interest"].includes(h)) th.addClass("ft-col-amount");
+    });
     const tbody = table.createEl("tbody");
     for (const l of loans) {
       const tr = tbody.createEl("tr");
@@ -206,7 +207,10 @@ export class LoanModal extends Modal {
     if (loan.repayments.length > 0) {
       const table = el.createEl("table", { cls: "ft-table" });
       const hr = table.createEl("thead").createEl("tr");
-      ["Date", "Principal", "Interest", "Account", ""].forEach((h) => hr.createEl("th", { text: h }));
+      ["Date", "Principal", "Interest", "Account", ""].forEach((h) => {
+        const th = hr.createEl("th", { text: h });
+        if (["Principal", "Interest"].includes(h)) th.addClass("ft-col-amount");
+      });
       const tbody = table.createEl("tbody");
       for (const r of loan.repayments) {
         const tr = tbody.createEl("tr");

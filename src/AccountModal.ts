@@ -45,7 +45,10 @@ export class AccountModal extends Modal {
     const balances = computeBalances(accounts, this.plugin.store.getAll());
     const table = this.listEl.createEl("table", { cls: "ft-table" });
     const hr = table.createEl("thead").createEl("tr");
-    ["", "Account", "Initial", "Current balance", ""].forEach((h) => hr.createEl("th", { text: h }));
+    ["", "Account", "Initial", "Current balance", ""].forEach((h) => {
+      const th = hr.createEl("th", { text: h });
+      if (["Initial", "Current balance"].includes(h)) th.addClass("ft-col-amount");
+    });
     const tbody = table.createEl("tbody");
     for (const b of balances) {
       const a = b.account;

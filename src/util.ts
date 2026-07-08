@@ -309,3 +309,87 @@ export function transactionsToCSV(txns: Transaction[], accounts: Account[] = [])
   }
   return lines.join("\n") + "\n";
 }
+
+// ── CSV parsing (import) ───────────────────────────────────────────
+export interface ParsedRow {
+  date: string;
+  time?: string;
+  type: TxnType;
+  category: string;
+  subcategory: string;
+  amount: number;
+  accountName?: string;
+  toAccountName?: string;
+  note?: string;
+}
+
+function parseCsvLine(line: string): string[] {
+  const out: string[] = [];
+  let cur = "";
+  let inQ = false;
+  for (let i = 0; i < line.length; i++) {
+    const ch = line[i];
+    if (ch === '"') {
+      if (inQ && line[i + 1] === '"') { cur += '"'; i++; }
+      else inQ = !inQ;
+    } else if (ch === "," && !inQ) {
+      out.push(cur); cur = "";
+    } else cur += ch;
+  }
+  out.push(cur);
+  return out.map((s) => s.trim());
+}
+
+const VALID_TYPES = ["income", "expense", "investment", "transfer"];
+
+/**
+ * Parses CSV text into transaction rows. Recognises columns by header name:
+ * date, time, type, category, sub-category/subcategory, amount,
+ * account, to-account/toaccount, note. Order-independent.
+ */
+export function parseTransactionsCSV(text: string): { rows: ParsedRow[]; skipped: number } {
+  const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+  if (lines.length < 2) return { rows: [], skipped: 0 };
+  const header = parseCsvLine(lines[0]).map((h) => h.toLowerCase().trim());
+  const idx = (names: string[]) => {
+    for (const n of names) {
+      const i = header.indexOf(n);
+      if (i >= 0) return i;
+    }
+    return -1;
+  };
+  const iDate = idx(["date"]);
+  const iTime = idx(["time"]);
+  const iType = idx(["type"]);
+  const iCat = idx(["category"]);
+  const iSub = idx(["sub-category", "subcategory", "sub category"]);
+  const iAmt = idx(["amount", "value"]);
+  const iAcc = idx(["account", "from-account", "from account"]);
+  const iTo = idx(["to-account", "toaccount", "to account"]);
+  const iNote = idx(["note", "notes", "description"]);
+
+  const rows: ParsedRow[] = [];
+  let skipped = 0;
+  for (let li = 1; li < lines.length; li++) {
+    const f = parseCsvLine(lines[li]);
+    const date = iDate >= 0 ? (f[iDate] || "").trim() : "";
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) { skipped++; continue; }
+    const amtRaw = iAmt >= 0 ? (f[iAmt] || "").replace(/[^0-9.-]/g, "") : "";
+    const amount = Math.abs(parseFloat(amtRaw));
+    if (isNaN(amount) || amount <= 0) { skipped++; continue; }
+    let type = (iType >= 0 ? (f[iType] || "").toLowerCase().trim() : "expense") as TxnType;
+    if (!VALID_TYPES.includes(type)) type = "expense";
+    rows.push({
+      date,
+      time: iTime >= 0 && f[iTime] ? f[iTime].trim() : undefined,
+      type,
+      category: iCat >= 0 ? f[iCat] || "" : "",
+      subcategory: iSub >= 0 ? f[iSub] || "" : "",
+      amount,
+      accountName: iAcc >= 0 && f[iAcc] ? f[iAcc].trim() : undefined,
+      toAccountName: iTo >= 0 && f[iTo] ? f[iTo].trim() : undefined,
+      note: iNote >= 0 ? f[iNote] || "" : "",
+    });
+  }
+  return { rows, skipped };
+}
