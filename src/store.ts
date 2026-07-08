@@ -181,6 +181,32 @@ export class FinanceStore {
     await this.writeFile(this.loansPath, JSON.stringify(this.data.loans ?? [], null, 2));
   }
 
+  /**
+   * Writes a full snapshot of all data to backups/finance-YYYY-MM-DD.json (once
+   * per day) and keeps the most recent `keep` snapshots. A safety net so any
+   * accidental deletion/corruption is recoverable.
+   */
+  async backup(keep = 7): Promise<void> {
+    try {
+      const dir = this.p("backups");
+      const today = new Date().toISOString().slice(0, 10);
+      const path = normalizePath(`${dir}/finance-${today}.json`);
+      if (await this.adapter.exists(path)) return; // already backed up today
+      await this.ensureDir(dir);
+      await this.writeFile(path, JSON.stringify(this.data, null, 2));
+      // prune old snapshots
+      const list = await this.adapter.list(dir);
+      const files = (list.files || []).filter((f) => f.endsWith(".json")).sort();
+      const excess = files.slice(0, Math.max(0, files.length - keep));
+      for (const f of excess) {
+        try { await this.adapter.remove(f); } catch { /* ignore */ }
+      }
+      this.lastWrite = Date.now();
+    } catch (e) {
+      console.error("Finance Tracker: backup failed", e);
+    }
+  }
+
   /** Writes (or deletes if empty) the file for a single month. */
   private async saveMonth(ym: string): Promise<void> {
     if (!ym) return;

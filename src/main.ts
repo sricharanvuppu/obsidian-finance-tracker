@@ -24,6 +24,9 @@ export default class FinanceTrackerPlugin extends Plugin {
     // settings on first run with this version.
     await this.reconcileConfig();
 
+    // Daily full-snapshot backup (recoverable safety net).
+    await this.store.backup();
+
     // Auto-post any due recurring transactions since last open.
     await this.materializeRecurring();
 
@@ -83,6 +86,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     // (e.g. after a sync on another device, or an external edit).
     const onFileChange = (file: { path: string }) => {
       const base = normalizePath(this.store.baseDir);
+      if (file.path.includes("/backups/")) return; // ignore our snapshot churn
       if (file.path === base || file.path.startsWith(base + "/")) {
         this.reloadIfChanged();
       }
