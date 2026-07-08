@@ -80,7 +80,7 @@ const percentLabelPlugin = {
     const meta = chart.getDatasetMeta(0);
     const ctx = chart.ctx;
     ctx.save();
-    ctx.font = "bold 11px var(--font-interface, sans-serif)";
+    ctx.font = "bold 11px sans-serif";
     ctx.fillStyle = "#ffffff";
     ctx.textAlign = "center";
     ctx.textBaseline = "middle";
@@ -800,6 +800,7 @@ export class FinanceDashboardView extends ItemView {
               color: this.textColor(),
               generateLabels: (c: any) => {
                 const ds = c.data.datasets[0];
+                const tc = this.textColor();
                 return (c.data.labels || []).map((l: string, i: number) => {
                   const v = Number(ds.data[i]) || 0;
                   const pct = total ? ((v / total) * 100).toFixed(0) : "0";
@@ -807,6 +808,7 @@ export class FinanceDashboardView extends ItemView {
                     text: `${l} — ${pct}%`,
                     fillStyle: (ds.backgroundColor as string[])[i],
                     strokeStyle: "rgba(0,0,0,0)",
+                    fontColor: tc,
                     index: i,
                   };
                 });
