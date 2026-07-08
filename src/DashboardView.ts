@@ -1125,9 +1125,11 @@ export class FinanceDashboardView extends ItemView {
     // ── Needs vs Wants ──
     const wants = new Set(this.plugin.settings.discretionary || []);
     if (wants.size > 0) {
+      const isWant = (t: Transaction) =>
+        wants.has(t.category) || wants.has(`${t.category}|${t.subcategory}`);
       const expenses = inScope.filter((t) => t.type === "expense");
-      const wantSum = expenses.filter((t) => wants.has(t.category)).reduce((s, t) => s + t.amount, 0);
-      const needSum = expenses.filter((t) => !wants.has(t.category)).reduce((s, t) => s + t.amount, 0);
+      const wantSum = expenses.filter((t) => isWant(t)).reduce((s, t) => s + t.amount, 0);
+      const needSum = expenses.filter((t) => !isWant(t)).reduce((s, t) => s + t.amount, 0);
       const totalNW = wantSum + needSum;
       if (totalNW > 0) {
         const nwCards = root.createDiv("ft-cards");

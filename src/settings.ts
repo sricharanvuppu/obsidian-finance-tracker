@@ -1,6 +1,7 @@
 import { App, PluginSettingTab, Setting, Notice } from "obsidian";
 import { CategoryMap, CategoryType, CATEGORY_TYPES, TYPE_LABELS, DEFAULT_CATEGORIES } from "./types";
 import { AccountModal } from "./AccountModal";
+import { WantsModal } from "./WantsModal";
 import type FinanceTrackerPlugin from "./main";
 
 export class FinanceSettingTab extends PluginSettingTab {
@@ -76,20 +77,13 @@ export class FinanceSettingTab extends PluginSettingTab {
       });
 
     new Setting(containerEl)
-      .setName("Discretionary categories (Wants)")
-      .setDesc("Comma-separated expense categories treated as 'Wants' (e.g. Food & Dining, Entertainment, Shopping, Travel). Everything else counts as 'Needs'.")
-      .addTextArea((ta) => {
-        ta.inputEl.rows = 3;
-        ta.inputEl.addClass("ft-cat-textarea");
-        ta.setValue((this.plugin.settings.discretionary || []).join(", "));
-        ta.onChange(async (v) => {
-          this.plugin.settings.discretionary = v
-            .split(",")
-            .map((s) => s.trim())
-            .filter((s) => s.length > 0);
-          await this.plugin.saveSettings();
-        });
-      });
+      .setName("Needs vs Wants")
+      .setDesc("Mark discretionary spending as 'Wants' — at category or sub-category level (e.g. Groceries → only Snacks).")
+      .addButton((b) =>
+        b.setButtonText("Classify categories").onClick(() => {
+          new WantsModal(this.app, this.plugin, () => {}).open();
+        })
+      );
 
     containerEl.createEl("h3", { text: "Categories" });
     containerEl.createEl("p", {
