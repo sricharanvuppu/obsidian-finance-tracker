@@ -407,6 +407,18 @@
   font-weight: 600;
   margin: 6px 0 8px;
 }
+.ft-tag {
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 999px;
+  margin-right: 8px;
+}
+.ft-tag-want { color: #fff; background: #e15759; }
+.ft-tag-need { color: #fff; background: #59a14f; }
+/* when used on a Setting description (category row) */
+.setting-item-description.ft-tag-want { color: #e15759; background: transparent; padding: 0; font-weight: 600; }
+.setting-item-description.ft-tag-need { color: var(--text-muted); background: transparent; padding: 0; }
 .ft-event-txn-title {
   margin: 12px 0 4px;
   font-size: 12px;

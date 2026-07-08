@@ -44,37 +44,45 @@ export class WantsModal extends Modal {
 
     for (const cat of cats) {
       const wholeKey = cat;
+      const wholeOn = this.set().has(wholeKey);
       const catSetting = new Setting(contentEl)
         .setName(cat)
-        .setDesc("Whole category is a Want")
+        .setDesc(wholeOn ? "Whole category → Want" : "Whole category")
         .addToggle((tg) => {
-          tg.setValue(this.set().has(wholeKey));
+          tg.setValue(wholeOn);
           tg.onChange(async (v) => {
             const s = this.set();
             if (v) s.add(wholeKey);
             else s.delete(wholeKey);
             await this.persist(s);
-            this.display(); // re-render to reflect enabled/disabled subs
+            this.display(); // re-render to reflect enabled/disabled subs + labels
           });
         });
       catSetting.nameEl.style.fontWeight = "700";
+      catSetting.descEl.addClass(wholeOn ? "ft-tag-want" : "ft-tag-need");
 
-      const wholeOn = this.set().has(wholeKey);
       const subs = expense[cat] || [];
       for (const sub of subs) {
         const key = `${cat}|${sub}`;
-        new Setting(contentEl)
-          .setName("↳ " + sub)
-          .addToggle((tg) => {
-            tg.setValue(wholeOn || this.set().has(key));
-            tg.setDisabled(wholeOn);
-            tg.onChange(async (v) => {
-              const s = this.set();
-              if (v) s.add(key);
-              else s.delete(key);
-              await this.persist(s);
-            });
+        const isWant = wholeOn || this.set().has(key);
+        const st = new Setting(contentEl).setName("↳ " + sub);
+        const badge = st.controlEl.createSpan({
+          cls: "ft-tag " + (isWant ? "ft-tag-want" : "ft-tag-need"),
+          text: isWant ? "Want" : "Need",
+        });
+        st.addToggle((tg) => {
+          tg.setValue(isWant);
+          tg.setDisabled(wholeOn);
+          tg.onChange(async (v) => {
+            const s = this.set();
+            if (v) s.add(key);
+            else s.delete(key);
+            await this.persist(s);
+            badge.setText(v ? "Want" : "Need");
+            badge.removeClass("ft-tag-need", "ft-tag-want");
+            badge.addClass(v ? "ft-tag-want" : "ft-tag-need");
           });
+        });
       }
     }
   }
