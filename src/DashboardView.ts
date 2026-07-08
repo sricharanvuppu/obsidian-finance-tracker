@@ -1140,7 +1140,7 @@ export class FinanceDashboardView extends ItemView {
         c.createDiv({ cls: "ft-card-value", text: `${wantPct.toFixed(0)}%` });
         c.createDiv({ cls: "ft-card-extra", text: `${formatCurrency(wantSum, this.plugin.settings)} of ${formatCurrency(totalNW, this.plugin.settings)}` });
 
-        const box = root.createDiv("ft-chart-box");
+        const box = root.createDiv("ft-charts").createDiv("ft-chart-box");
         box.createEl("h3", { text: "Needs vs Wants" });
         this.makePie(box.createEl("canvas"), [
           ["Needs", needSum],
