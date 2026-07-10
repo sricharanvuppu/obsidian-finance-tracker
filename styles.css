@@ -182,6 +182,8 @@
 .ft-balance-value.ft-neg { color: #e15759; }
 .ft-balance-card.ft-receivable { border: 1px solid #59a14f; }
 .ft-balance-card.ft-payable { border: 1px solid #e15759; }
+.ft-balance-card.ft-holdings { border: 1px solid #4e79a7; }
+.ft-holdings-total { margin-top: 10px; font-weight: 700; }
 
 /* Lending reminders */
 .ft-reminder {
@@ -257,6 +259,19 @@
   border: 1px solid var(--background-modifier-border);
   border-radius: 6px;
 }
+.ft-bulk-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  background: var(--background-secondary);
+  border-radius: 8px;
+}
+.ft-bulk-count { font-weight: 600; margin-right: 4px; }
+.ft-bulk-bar button.mod-warning { color: #fff; background: #e15759; }
+.ft-table tbody tr.is-selected { background: var(--background-modifier-hover); }
 .ft-pager {
   display: flex;
   align-items: center;

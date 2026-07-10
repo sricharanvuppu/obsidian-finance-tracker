@@ -56,6 +56,16 @@ export interface LastUsed {
   subcategory?: string;
 }
 
+/** An investment holding, valued at units × current price. */
+export interface Holding {
+  id: string;
+  name: string;
+  kind: string; // e.g. Stock, Mutual Fund, Gold
+  units: number;
+  price: number; // current price per unit
+  note?: string;
+}
+
 export type EventStatus = "planned" | "active" | "done";
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
@@ -89,6 +99,7 @@ export interface FinanceData {
   savingsGoal?: number; // monthly savings target
   discretionary?: string[]; // expense category names treated as "wants"
   favorites?: QuickFavorite[];
+  holdings?: Holding[];
 }
 
 export type LoanDirection = "lent" | "borrowed";
@@ -167,6 +178,7 @@ export interface FinanceSettings {
   discretionary: string[];
   favorites: QuickFavorite[];
   lastUsed?: LastUsed;
+  holdings: Holding[];
 }
 
 export const TYPE_LABELS: Record<TxnType, string> = {
@@ -220,4 +232,5 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   savingsGoal: 0,
   discretionary: [],
   favorites: [],
+  holdings: [],
 };

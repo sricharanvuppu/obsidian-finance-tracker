@@ -45,6 +45,7 @@ import { AccountModal } from "./AccountModal";
 import { LoanModal } from "./LoanModal";
 import { EventModal } from "./EventModal";
 import { ImportModal } from "./ImportModal";
+import { HoldingsModal } from "./HoldingsModal";
 import type FinanceTrackerPlugin from "./main";
 
 Chart.register(
@@ -160,11 +161,12 @@ export class FinanceDashboardView extends ItemView {
     return computeRange(this.preset, this.plugin.store.getAll(), this.custom ?? undefined);
   }
 
-  /** Total market value of tracked investment holdings (Feature D). */
+  /** Total market value of tracked investment holdings. */
   private holdingsValue(): number {
-    const holdings = (this.plugin.settings as any).holdings as any[] | undefined;
-    if (!Array.isArray(holdings)) return 0;
-    return holdings.reduce((s, h) => s + (Number(h.units) || 0) * (Number(h.price) || 0), 0);
+    return (this.plugin.settings.holdings || []).reduce(
+      (s, h) => s + (Number(h.units) || 0) * (Number(h.price) || 0),
+      0
+    );
   }
 
   /** IDs of events flagged as capital (excluded from monthly/overspending analysis). */
@@ -290,6 +292,11 @@ export class FinanceDashboardView extends ItemView {
     eventBtn.setAttr("aria-label", "Manage life events");
     eventBtn.onclick = () =>
       new EventModal(this.app, this.plugin, () => this.refresh()).open();
+
+    const holdBtn = tabs.createEl("button", { text: "📈 Holdings", cls: "ft-chip" });
+    holdBtn.setAttr("aria-label", "Manage investment holdings");
+    holdBtn.onclick = () =>
+      new HoldingsModal(this.app, this.plugin, () => this.refresh()).open();
 
     const exportBtn = tabs.createEl("button", { text: "⤓ Export CSV", cls: "ft-chip" });
     exportBtn.onclick = () => this.exportCSV();
@@ -751,6 +758,12 @@ export class FinanceDashboardView extends ItemView {
       const c = cards.createDiv("ft-balance-card ft-payable");
       c.createDiv({ cls: "ft-balance-name", text: "Owed (borrowed)" });
       const v = c.createDiv({ cls: "ft-balance-value ft-neg", text: formatCurrency(payable, this.plugin.settings) });
+    }
+    const holdings = this.holdingsValue();
+    if (holdings > 0) {
+      const c = cards.createDiv("ft-balance-card ft-holdings");
+      c.createDiv({ cls: "ft-balance-name", text: "Investments (market value)" });
+      c.createDiv({ cls: "ft-balance-value", text: formatCurrency(holdings, this.plugin.settings) });
     }
   }
 
@@ -1483,6 +1496,7 @@ export class FinanceDashboardView extends ItemView {
   private tableContainer: HTMLElement | null = null;
   private page = 0;
   private pageSize = 50;
+  private selected = new Set<string>();
 
   private renderTable(root: HTMLElement, txns: Transaction[]) {
     this.tableContainer = root.createDiv("ft-table-wrap");
@@ -1540,11 +1554,83 @@ export class FinanceDashboardView extends ItemView {
       this.drawTable(txns);
     };
 
+    // Bulk-action bar (shown when rows are selected)
+    if (this.selected.size > 0) {
+      const bar = wrap.createDiv("ft-bulk-bar");
+      bar.createSpan({ cls: "ft-bulk-count", text: `${this.selected.size} selected` });
+
+      const ids = () => Array.from(this.selected);
+      const accounts = this.plugin.settings.accounts;
+
+      // set account
+      const acctSel = bar.createEl("select");
+      acctSel.createEl("option", { text: "Set account…", value: "" });
+      accounts.forEach((a) => acctSel.createEl("option", { text: a.name, value: a.id }));
+      acctSel.onchange = async () => {
+        if (!acctSel.value) return;
+        await this.plugin.store.updateMany(ids(), { account: acctSel.value });
+        this.selected.clear();
+        this.refresh();
+      };
+
+      // set category (all categories across types)
+      const catSel = bar.createEl("select");
+      catSel.createEl("option", { text: "Set category…", value: "" });
+      const allCats = new Set<string>();
+      (["income", "expense", "investment"] as const).forEach((tp) =>
+        Object.keys(this.plugin.settings.categories[tp] || {}).forEach((c) => allCats.add(c))
+      );
+      Array.from(allCats).sort().forEach((c) => catSel.createEl("option", { text: c, value: c }));
+      catSel.onchange = async () => {
+        if (!catSel.value) return;
+        await this.plugin.store.updateMany(ids(), { category: catSel.value, subcategory: "" });
+        this.selected.clear();
+        this.refresh();
+      };
+
+      // set event
+      const events = this.plugin.settings.events || [];
+      if (events.length > 0) {
+        const evSel = bar.createEl("select");
+        evSel.createEl("option", { text: "Set event…", value: "__none__" });
+        events.forEach((e) => evSel.createEl("option", { text: e.name, value: e.id }));
+        evSel.createEl("option", { text: "— Clear event —", value: "" });
+        evSel.onchange = async () => {
+          if (evSel.value === "__none__") return;
+          await this.plugin.store.updateMany(ids(), { event: evSel.value || undefined });
+          this.selected.clear();
+          this.refresh();
+        };
+      }
+
+      const del = bar.createEl("button", { text: "🗑 Delete", cls: "mod-warning" });
+      del.onclick = async () => {
+        await this.plugin.store.removeMany(ids());
+        this.selected.clear();
+        this.refresh();
+      };
+      const clear = bar.createEl("button", { text: "Clear selection" });
+      clear.onclick = () => {
+        this.selected.clear();
+        this.drawTable(txns);
+      };
+    }
+
     // Scrollable table region with sticky header
     const scroll = wrap.createDiv("ft-table-scroll");
     const table = scroll.createEl("table", { cls: "ft-table" });
     const thead = table.createEl("thead");
     const hr = thead.createEl("tr");
+    // select-all checkbox
+    const selAllTh = hr.createEl("th");
+    const selAll = selAllTh.createEl("input");
+    selAll.type = "checkbox";
+    selAll.checked = pageRows.length > 0 && pageRows.every((t) => this.selected.has(t.id));
+    selAll.onchange = () => {
+      if (selAll.checked) pageRows.forEach((t) => this.selected.add(t.id));
+      else pageRows.forEach((t) => this.selected.delete(t.id));
+      this.drawTable(txns);
+    };
     const cols: { key: keyof Transaction; label: string }[] = [
       { key: "date", label: "Date / Time" },
       { key: "type", label: "Type" },
@@ -1574,6 +1660,18 @@ export class FinanceDashboardView extends ItemView {
     const tbody = table.createEl("tbody");
     for (const t of pageRows) {
       const tr = tbody.createEl("tr");
+      const cbTd = tr.createEl("td");
+      const cb = cbTd.createEl("input");
+      cb.type = "checkbox";
+      cb.checked = this.selected.has(t.id);
+      cb.onchange = () => {
+        if (cb.checked) this.selected.add(t.id);
+        else this.selected.delete(t.id);
+        // toggle bar visibility without full redraw when crossing 0/1 boundary
+        if (this.selected.size <= 1) this.drawTable(txns);
+        else tr.toggleClass("is-selected", cb.checked);
+      };
+      if (cb.checked) tr.addClass("is-selected");
       tr.createEl("td", { text: t.time ? `${t.date} ${t.time}` : t.date }).addClass("ft-col-date");
       tr.createEl("td", { text: t.type }).addClass("ft-type-" + t.type);
       tr.createEl("td", { text: t.category });

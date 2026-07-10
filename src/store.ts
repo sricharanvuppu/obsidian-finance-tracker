@@ -100,6 +100,7 @@ export class FinanceStore {
       savingsGoal: parsed.savingsGoal,
       discretionary: parsed.discretionary,
       favorites: parsed.favorites,
+      holdings: parsed.holdings,
     };
   }
 
@@ -138,6 +139,7 @@ export class FinanceStore {
       savingsGoal: cfg.savingsGoal,
       discretionary: cfg.discretionary,
       favorites: cfg.favorites,
+      holdings: cfg.holdings,
     };
   }
 
@@ -182,6 +184,7 @@ export class FinanceStore {
       savingsGoal: this.data.savingsGoal ?? 0,
       discretionary: this.data.discretionary ?? [],
       favorites: this.data.favorites ?? [],
+      holdings: this.data.holdings ?? [],
     };
     await this.writeFile(this.configPath, JSON.stringify(cfg, null, 2));
   }
@@ -258,6 +261,30 @@ export class FinanceStore {
     const ym = monthOf(t.date);
     this.data.transactions = this.data.transactions.filter((x) => x.id !== id);
     await this.saveMonth(ym);
+  }
+
+  /** Applies a patch to many transactions, writing each affected month once. */
+  async updateMany(ids: string[], patch: Partial<Omit<Transaction, "id">>): Promise<void> {
+    const idset = new Set(ids);
+    const months = new Set<string>();
+    for (const t of this.data.transactions) {
+      if (!idset.has(t.id)) continue;
+      months.add(monthOf(t.date));
+      Object.assign(t, patch);
+      months.add(monthOf(t.date));
+    }
+    for (const m of months) await this.saveMonth(m);
+  }
+
+  /** Removes many transactions, writing each affected month once. */
+  async removeMany(ids: string[]): Promise<void> {
+    const idset = new Set(ids);
+    const months = new Set<string>();
+    this.data.transactions.forEach((t) => {
+      if (idset.has(t.id)) months.add(monthOf(t.date));
+    });
+    this.data.transactions = this.data.transactions.filter((t) => !idset.has(t.id));
+    for (const m of months) await this.saveMonth(m);
   }
 
   // ── loans ─────────────────────────────────────────────────────────
