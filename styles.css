@@ -361,9 +361,18 @@
 }
 
 /* Mode tabs */
+.ft-actions-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-bottom: 8px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--background-modifier-border);
+}
 .ft-mode-tabs {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 6px;
   margin-bottom: 12px;
   border-bottom: 1px solid var(--background-modifier-border);

@@ -264,6 +264,27 @@ export class FinanceDashboardView extends ItemView {
   }
 
   private renderModeTabs(root: HTMLElement) {
+    // Row 1 (top): management / action buttons
+    const actions = root.createDiv("ft-actions-row");
+    const mkChip = (label: string, aria: string, onClick: () => void) => {
+      const b = actions.createEl("button", { text: label, cls: "ft-chip" });
+      b.setAttr("aria-label", aria);
+      b.onclick = onClick;
+      return b;
+    };
+    mkChip("🏦 Accounts", "Manage accounts", () =>
+      new AccountModal(this.app, this.plugin, () => this.refresh()).open());
+    mkChip("💰 Loans", "Manage lending & borrowing", () =>
+      new LoanModal(this.app, this.plugin, () => this.refresh()).open());
+    mkChip("📈 Holdings", "Manage investment holdings", () =>
+      new HoldingsModal(this.app, this.plugin, () => this.refresh()).open());
+    mkChip("↻ Recurring", "Manage recurring transactions", () =>
+      new RecurringModal(this.app, this.plugin, () => this.refresh()).open());
+    mkChip("⤒ Import CSV", "Import transactions from CSV", () =>
+      new ImportModal(this.app, this.plugin, () => this.refresh()).open());
+    mkChip("⤓ Export CSV", "Export transactions to CSV", () => this.exportCSV());
+
+    // Row 2: navigation tabs
     const tabs = root.createDiv("ft-mode-tabs");
     const modes: { key: typeof this.mode; label: string }[] = [
       { key: "dashboard", label: "Dashboard" },
@@ -283,40 +304,6 @@ export class FinanceDashboardView extends ItemView {
         this.render();
       };
     });
-
-    const spacer = tabs.createDiv("ft-mode-spacer");
-    spacer.style.flex = "1";
-
-    const recurBtn = tabs.createEl("button", { text: "↻ Recurring", cls: "ft-chip" });
-    recurBtn.setAttr("aria-label", "Manage recurring transactions");
-    recurBtn.onclick = () =>
-      new RecurringModal(this.app, this.plugin, () => this.refresh()).open();
-
-    const acctBtn = tabs.createEl("button", { text: "🏦 Accounts", cls: "ft-chip" });
-    acctBtn.setAttr("aria-label", "Manage accounts");
-    acctBtn.onclick = () =>
-      new AccountModal(this.app, this.plugin, () => this.refresh()).open();
-
-    const loanBtn = tabs.createEl("button", { text: "💰 Loans", cls: "ft-chip" });
-    loanBtn.setAttr("aria-label", "Manage lending & borrowing");
-    loanBtn.onclick = () =>
-      new LoanModal(this.app, this.plugin, () => this.refresh()).open();
-
-    const eventBtn = tabs.createEl("button", { text: "🎉 Events", cls: "ft-chip" });
-    eventBtn.setAttr("aria-label", "Manage life events");
-    eventBtn.onclick = () =>
-      new EventModal(this.app, this.plugin, () => this.refresh()).open();
-
-    const holdBtn = tabs.createEl("button", { text: "📈 Holdings", cls: "ft-chip" });
-    holdBtn.setAttr("aria-label", "Manage investment holdings");
-    holdBtn.onclick = () =>
-      new HoldingsModal(this.app, this.plugin, () => this.refresh()).open();
-
-    const exportBtn = tabs.createEl("button", { text: "⤓ Export CSV", cls: "ft-chip" });
-    exportBtn.onclick = () => this.exportCSV();
-
-    const importBtn = tabs.createEl("button", { text: "⤒ Import CSV", cls: "ft-chip" });
-    importBtn.onclick = () => new ImportModal(this.app, this.plugin, () => this.refresh()).open();
   }
 
   private async exportCSV() {
