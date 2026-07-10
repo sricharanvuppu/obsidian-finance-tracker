@@ -19,6 +19,8 @@ export class AddTransactionModal extends Modal {
   private account = ""; // account id (source)
   private toAccount = ""; // account id (transfer destination)
   private event = ""; // life-event id (optional)
+  private splitMode = false;
+  private splitLines: { category: string; subcategory: string; amount: number | null }[] = [];
 
   private dynamicEl!: HTMLElement;
   private catSelect: HTMLSelectElement | null = null;
@@ -93,36 +95,57 @@ export class AddTransactionModal extends Modal {
       btn.addClass("ft-type-" + t);
       btn.onclick = () => {
         this.type = t;
+        if (t === "transfer") this.splitMode = false;
         if (t !== "transfer") {
           const cats = Object.keys(this.catMap());
           this.category = cats[0] ?? "";
           this.subcategory = (this.catMap()[this.category] ?? [])[0] ?? "";
         }
-        typeRow.querySelectorAll(".ft-type-btn").forEach((b) => b.removeClass("is-active"));
-        btn.addClass("is-active");
-        this.renderDynamic();
+        this.rerender();
       };
     });
 
+    // Split toggle (new, non-transfer entries only)
+    if (!this.editing && this.type !== "transfer") {
+      const splitRow = contentEl.createDiv("ft-split-toggle");
+      const lbl = splitRow.createEl("label");
+      const cb = lbl.createEl("input");
+      cb.type = "checkbox";
+      cb.checked = this.splitMode;
+      lbl.appendText(" Split across categories");
+      cb.onchange = () => {
+        this.splitMode = cb.checked;
+        if (this.splitMode && this.splitLines.length === 0) {
+          this.splitLines = [
+            { category: this.category, subcategory: this.subcategory, amount: this.amount },
+            { category: this.category, subcategory: "", amount: null },
+          ];
+        }
+        this.rerender();
+      };
+    }
+
     this.dynamicEl = contentEl.createDiv("ft-dynamic");
 
-    // Amount
-    new Setting(contentEl).setName("Amount").addText((txt) => {
-      txt.inputEl.type = "number";
-      txt.inputEl.setAttr("step", "0.01");
-      txt.inputEl.setAttr("min", "0");
-      txt.inputEl.addClass("ft-amount-input");
-      if (this.amount != null) txt.setValue(String(this.amount));
-      txt.setPlaceholder("0.00");
-      txt.onChange((v) => (this.amount = v === "" ? null : parseFloat(v)));
-      txt.inputEl.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
-          e.preventDefault();
-          this.submit();
+    // Amount (single-entry only; split lines carry their own amounts)
+    if (!this.splitMode) {
+      new Setting(contentEl).setName("Amount").addText((txt) => {
+        txt.inputEl.type = "number";
+        txt.inputEl.setAttr("step", "0.01");
+        txt.inputEl.setAttr("min", "0");
+        txt.inputEl.addClass("ft-amount-input");
+        if (this.amount != null) txt.setValue(String(this.amount));
+        txt.setPlaceholder("0.00");
+        txt.onChange((v) => (this.amount = v === "" ? null : parseFloat(v)));
+        txt.inputEl.addEventListener("keydown", (e) => {
+          if (e.key === "Enter") {
+            e.preventDefault();
+            this.submit();
         }
       });
       window.setTimeout(() => txt.inputEl.focus(), 30);
-    });
+      });
+    }
 
     // Date
     new Setting(contentEl).setName("Date").addText((txt) => {
@@ -183,6 +206,12 @@ export class AddTransactionModal extends Modal {
     this.renderDynamic();
   }
 
+  /** Full re-render of the modal (used on type/split toggle). */
+  private rerender() {
+    this.contentEl.empty();
+    this.onOpen();
+  }
+
   /** Fills the form from a saved favorite and re-renders. */
   private applyFavorite(f: QuickFavorite) {
     this.type = f.type;
@@ -220,6 +249,59 @@ export class AddTransactionModal extends Modal {
     }).open();
   }
 
+  /** Renders the split-lines editor (account + N category/amount rows). */
+  private renderSplitLines(el: HTMLElement, accts: Account[]) {
+    // shared account
+    new Setting(el).setName("Account").addDropdown((dd) => {
+      if (accts.length === 0) { dd.addOption("", "(no accounts)"); dd.setDisabled(true); }
+      else {
+        accts.forEach((a) => dd.addOption(a.id, a.name));
+        if (!this.account) this.account = accts[0].id;
+        dd.setValue(this.account);
+      }
+      dd.onChange((v) => (this.account = v));
+    });
+
+    const cats = Object.keys(this.catMap());
+    el.createEl("div", { cls: "setting-item-description", text: "Split lines (each becomes its own transaction):" });
+    this.splitLines.forEach((line, i) => {
+      const row = el.createDiv("ft-split-line");
+      const catSel = row.createEl("select");
+      cats.forEach((c) => catSel.createEl("option", { text: c, value: c }));
+      if (!line.category && cats[0]) line.category = cats[0];
+      catSel.value = line.category;
+      catSel.onchange = () => {
+        line.category = catSel.value;
+        line.subcategory = "";
+        this.rerender();
+      };
+      const subSel = row.createEl("select");
+      subSel.createEl("option", { text: "—", value: "" });
+      (this.catMap()[line.category] ?? []).forEach((s) => subSel.createEl("option", { text: s, value: s }));
+      subSel.value = line.subcategory;
+      subSel.onchange = () => (line.subcategory = subSel.value);
+      const amt = row.createEl("input");
+      amt.type = "number";
+      amt.placeholder = "0.00";
+      amt.value = line.amount != null ? String(line.amount) : "";
+      amt.oninput = () => (line.amount = amt.value === "" ? null : parseFloat(amt.value));
+      const del = row.createEl("button", { text: "✕", cls: "ft-icon-btn" });
+      del.onclick = () => {
+        this.splitLines.splice(i, 1);
+        this.rerender();
+      };
+    });
+
+    const bar = el.createDiv("ft-split-bar");
+    const addLine = bar.createEl("button", { text: "+ Add line" });
+    addLine.onclick = () => {
+      this.splitLines.push({ category: cats[0] ?? "", subcategory: "", amount: null });
+      this.rerender();
+    };
+    const total = this.splitLines.reduce((s, l) => s + (l.amount || 0), 0);
+    bar.createSpan({ cls: "ft-split-total", text: "Total: " + formatCurrency(total, this.plugin.settings) });
+  }
+
   /** Renders the category/sub-category or transfer account fields depending on type. */
   private renderDynamic() {
     const el = this.dynamicEl;
@@ -245,6 +327,11 @@ export class AddTransactionModal extends Modal {
         dd.setValue(this.toAccount);
         dd.onChange((v) => (this.toAccount = v));
       });
+      return;
+    }
+
+    if (this.splitMode) {
+      this.renderSplitLines(el, accts);
       return;
     }
 
@@ -356,6 +443,34 @@ export class AddTransactionModal extends Modal {
   }
 
   private async submit() {
+    // Split mode: create one transaction per line sharing a splitId.
+    if (this.splitMode && this.type !== "transfer") {
+      const valid = this.splitLines.filter((l) => l.category && l.amount != null && !isNaN(l.amount) && l.amount > 0);
+      if (valid.length === 0) {
+        new Notice("Add at least one split line with a category and amount.");
+        return;
+      }
+      const splitId = Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8);
+      for (const l of valid) {
+        await this.plugin.store.add({
+          date: this.date || todayISO(),
+          time: this.time || nowTimeIST(),
+          type: this.type,
+          category: l.category,
+          subcategory: l.subcategory,
+          amount: Math.abs(l.amount!),
+          note: this.note.trim(),
+          account: this.account || undefined,
+          event: this.event || undefined,
+          splitId,
+        });
+      }
+      new Notice(`Added split (${valid.length} lines).`);
+      this.onSaved();
+      this.close();
+      return;
+    }
+
     if (this.amount == null || isNaN(this.amount) || this.amount <= 0) {
       new Notice("Please enter a valid amount.");
       return;

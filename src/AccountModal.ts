@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Setting } from "obsidian";
-import { Account } from "./types";
+import { Account, AccountType, ACCOUNT_TYPE_LABELS } from "./types";
 import { computeBalances, formatCurrency } from "./util";
 import type FinanceTrackerPlugin from "./main";
 
@@ -10,6 +10,7 @@ export class AccountModal extends Modal {
   private editingId: string | null = null;
   private name = "";
   private initialBalance: number | null = null;
+  private type: AccountType = "asset";
 
   private listEl!: HTMLElement;
   private formEl!: HTMLElement;
@@ -45,7 +46,7 @@ export class AccountModal extends Modal {
     const balances = computeBalances(accounts, this.plugin.store.getAll());
     const table = this.listEl.createEl("table", { cls: "ft-table" });
     const hr = table.createEl("thead").createEl("tr");
-    ["", "Account", "Initial", "Current balance", ""].forEach((h) => {
+    ["", "Account", "Type", "Initial", "Current balance", ""].forEach((h) => {
       const th = hr.createEl("th", { text: h });
       if (["Initial", "Current balance"].includes(h)) th.addClass("ft-col-amount");
     });
@@ -64,6 +65,7 @@ export class AccountModal extends Modal {
       };
 
       tr.createEl("td", { text: a.name });
+      tr.createEl("td", { text: ACCOUNT_TYPE_LABELS[a.type ?? "asset"].split(" ")[0] });
       tr.createEl("td", { text: formatCurrency(a.initialBalance, this.plugin.settings) }).addClass("ft-amount");
       const bal = tr.createEl("td", { text: formatCurrency(b.balance, this.plugin.settings) });
       bal.addClass("ft-amount");
@@ -75,6 +77,7 @@ export class AccountModal extends Modal {
         this.editingId = a.id;
         this.name = a.name;
         this.initialBalance = a.initialBalance;
+        this.type = a.type ?? "asset";
         this.renderForm();
       };
       const del = act.createEl("button", { text: "🗑", cls: "ft-icon-btn" });
@@ -105,13 +108,26 @@ export class AccountModal extends Modal {
       t.onChange((v) => (this.name = v));
     });
 
+    new Setting(el).setName("Type").addDropdown((dd) => {
+      (Object.keys(ACCOUNT_TYPE_LABELS) as AccountType[]).forEach((t) => dd.addOption(t, ACCOUNT_TYPE_LABELS[t]));
+      dd.setValue(this.type);
+      dd.onChange((v) => {
+        this.type = v as AccountType;
+        this.renderForm();
+      });
+    });
+
+    const isDebt = this.type !== "asset";
     new Setting(el)
-      .setName("Initial balance")
-      .setDesc("Balance in this account before you start tracking.")
+      .setName(isDebt ? "Amount currently owed" : "Initial balance")
+      .setDesc(isDebt
+        ? "How much you currently owe on this card/loan (0 if nothing)."
+        : "Balance in this account before you start tracking.")
       .addText((t) => {
         t.inputEl.type = "number";
         t.inputEl.setAttr("step", "0.01");
-        if (this.initialBalance != null) t.setValue(String(this.initialBalance));
+        t.inputEl.setAttr("min", "0");
+        if (this.initialBalance != null) t.setValue(String(Math.abs(this.initialBalance)));
         t.setPlaceholder("0");
         t.onChange((v) => (this.initialBalance = v === "" ? null : parseFloat(v)));
       });
@@ -135,6 +151,7 @@ export class AccountModal extends Modal {
     this.editingId = null;
     this.name = "";
     this.initialBalance = null;
+    this.type = "asset";
   }
 
   private async save() {
@@ -143,12 +160,15 @@ export class AccountModal extends Modal {
       new Notice("Please enter an account name.");
       return;
     }
-    const initial = this.initialBalance == null || isNaN(this.initialBalance) ? 0 : this.initialBalance;
+    const raw = this.initialBalance == null || isNaN(this.initialBalance) ? 0 : Math.abs(this.initialBalance);
+    // Debt accounts store the opening balance as negative (amount owed).
+    const initial = this.type === "asset" ? raw : -raw;
     if (this.editingId) {
       const a = this.plugin.settings.accounts.find((x) => x.id === this.editingId);
       if (a) {
         a.name = name;
         a.initialBalance = initial;
+        a.type = this.type;
       }
     } else {
       this.plugin.settings.accounts.push({
@@ -156,6 +176,7 @@ export class AccountModal extends Modal {
         name,
         initialBalance: initial,
         active: true,
+        type: this.type,
       });
     }
     await this.plugin.saveSettings();

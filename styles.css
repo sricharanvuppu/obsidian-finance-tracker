@@ -12,6 +12,22 @@
   margin-bottom: 12px;
 }
 .ft-fav-label { font-size: 12px; color: var(--text-muted); }
+.ft-split-toggle { margin: 4px 0 10px; font-size: 13px; }
+.ft-split-line {
+  display: flex;
+  gap: 6px;
+  align-items: center;
+  margin: 4px 0;
+}
+.ft-split-line select { flex: 1; min-width: 0; }
+.ft-split-line input[type="number"] { width: 90px; }
+.ft-split-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 8px;
+}
+.ft-split-total { font-weight: 600; }
 .ft-type-btn {
   flex: 1;
   padding: 8px;

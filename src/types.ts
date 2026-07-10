@@ -5,11 +5,21 @@ export type TxnType = CategoryType | "transfer";
 
 export const CATEGORY_TYPES: CategoryType[] = ["income", "expense", "investment"];
 
+export type AccountType = "asset" | "credit" | "liability";
+
+export const ACCOUNT_TYPE_LABELS: Record<AccountType, string> = {
+  asset: "Asset (cash/bank)",
+  credit: "Credit card",
+  liability: "Liability/Loan",
+};
+
 export interface Account {
   id: string;
   name: string;
   initialBalance: number;
   active: boolean;
+  type?: AccountType; // defaults to "asset"
+  currency?: string; // ISO code; defaults to base currency
 }
 
 export interface Transaction {
@@ -24,6 +34,7 @@ export interface Transaction {
   account?: string; // account id (source account for income/expense/investment/transfer-from)
   toAccount?: string; // account id, only for transfers (destination)
   event?: string; // life-event id this transaction belongs to
+  splitId?: string; // groups transactions that were entered as one split payment
   recurringId?: string; // set when auto-generated from a recurring rule
 }
 

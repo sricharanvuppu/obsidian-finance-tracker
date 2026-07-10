@@ -160,6 +160,13 @@ export class FinanceDashboardView extends ItemView {
     return computeRange(this.preset, this.plugin.store.getAll(), this.custom ?? undefined);
   }
 
+  /** Total market value of tracked investment holdings (Feature D). */
+  private holdingsValue(): number {
+    const holdings = (this.plugin.settings as any).holdings as any[] | undefined;
+    if (!Array.isArray(holdings)) return 0;
+    return holdings.reduce((s, h) => s + (Number(h.units) || 0) * (Number(h.price) || 0), 0);
+  }
+
   /** IDs of events flagged as capital (excluded from monthly/overspending analysis). */
   private capitalEventIds(): Set<string> {
     return new Set((this.plugin.settings.events || []).filter((e) => e.capital).map((e) => e.id));
@@ -706,17 +713,23 @@ export class FinanceDashboardView extends ItemView {
 
     const all = this.plugin.store.getAll();
     const balances = computeBalances(accounts, all, loans);
-    const cash = balances.reduce((s, b) => s + b.balance, 0);
-    const worth = cash + receivable - payable;
+    const assets = balances
+      .filter((b) => (b.account.type ?? "asset") === "asset")
+      .reduce((s, b) => s + b.balance, 0);
+    const accountDebt = balances
+      .filter((b) => (b.account.type ?? "asset") !== "asset")
+      .reduce((s, b) => s + b.balance, 0); // negative when owing
+    const cash = assets + accountDebt; // net across all accounts
+    const worth = cash + receivable - payable + this.holdingsValue();
+    const hasDebt = accountDebt < 0 || payable > 0;
 
     const wrap = root.createDiv("ft-balances");
     const head = wrap.createDiv("ft-balances-head");
     head.createSpan({ cls: "ft-balances-title", text: "Balances & net worth" });
-    const totalTxt =
-      receivable > 0 || payable > 0
-        ? `Cash ${formatCurrency(cash, this.plugin.settings)} · Net worth ${formatCurrency(worth, this.plugin.settings)}`
-        : `Total: ${formatCurrency(cash, this.plugin.settings)}`;
-    head.createSpan({ cls: "ft-balances-total", text: totalTxt });
+    const parts: string[] = [`Assets ${formatCurrency(assets, this.plugin.settings)}`];
+    if (hasDebt) parts.push(`Debt ${formatCurrency(-accountDebt + payable, this.plugin.settings)}`);
+    parts.push(`Net worth ${formatCurrency(worth, this.plugin.settings)}`);
+    head.createSpan({ cls: "ft-balances-total", text: parts.join(" · ") });
 
     const cards = wrap.createDiv("ft-balance-cards");
     for (const b of balances) {
