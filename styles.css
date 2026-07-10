@@ -86,6 +86,17 @@
   align-items: center;
   gap: 6px;
 }
+.ft-range-control {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+.ft-filter-label {
+  font-size: 12px;
+  color: var(--text-muted);
+  align-self: center;
+}
 .ft-filters {
   display: flex;
   flex-wrap: wrap;

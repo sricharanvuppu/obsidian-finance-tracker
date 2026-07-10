@@ -479,39 +479,32 @@ export class FinanceDashboardView extends ItemView {
   }
 
   // ── Toolbar: date range + filters ────────────────────────────────
-  private renderToolbar(root: HTMLElement) {
-    const bar = root.createDiv("ft-toolbar");
-
-    const addBtn = bar.createEl("button", { text: "+ Add", cls: "mod-cta" });
-    addBtn.onclick = () =>
-      new AddTransactionModal(this.app, this.plugin, () => this.refresh()).open();
-
+  private renderRangeControl(container: HTMLElement) {
     const presets: { key: RangePreset; label: string }[] = [
       { key: "this-month", label: "This Month" },
       { key: "last-month", label: "Last Month" },
       { key: "this-year", label: "This Year" },
       { key: "last-year", label: "Last Year" },
-      { key: "all", label: "All" },
-      { key: "custom", label: "Custom" },
+      { key: "all", label: "All time" },
+      { key: "custom", label: "Custom range…" },
     ];
-    const presetWrap = bar.createDiv("ft-presets");
+    const wrap = container.createDiv("ft-range-control");
+    wrap.createSpan({ cls: "ft-filter-label", text: "Period:" });
+    const sel = wrap.createEl("select");
     presets.forEach((p) => {
-      const b = presetWrap.createEl("button", {
-        text: p.label,
-        cls: "ft-chip" + (this.preset === p.key ? " is-active" : ""),
-      });
-      b.onclick = () => {
-        this.preset = p.key;
-        if (p.key === "custom" && !this.custom) {
-          const r = computeRange("this-month", this.plugin.store.getAll());
-          this.custom = { ...r };
-        }
-        this.render();
-      };
+      const o = sel.createEl("option", { text: p.label, value: p.key });
+      if (this.preset === p.key) o.selected = true;
     });
+    sel.onchange = () => {
+      this.preset = sel.value as RangePreset;
+      if (this.preset === "custom" && !this.custom) {
+        this.custom = { ...computeRange("this-month", this.plugin.store.getAll()) };
+      }
+      this.render();
+    };
 
     if (this.preset === "custom") {
-      const cr = bar.createDiv("ft-custom-range");
+      const cr = wrap.createDiv("ft-custom-range");
       const from = cr.createEl("input");
       from.type = "date";
       from.value = this.custom?.from ?? "";
@@ -528,9 +521,20 @@ export class FinanceDashboardView extends ItemView {
         this.render();
       };
     }
+  }
+
+  private renderToolbar(root: HTMLElement) {
+    const bar = root.createDiv("ft-toolbar");
+
+    const addBtn = bar.createEl("button", { text: "+ Add", cls: "mod-cta" });
+    addBtn.onclick = () =>
+      new AddTransactionModal(this.app, this.plugin, () => this.refresh()).open();
+
+    this.renderRangeControl(bar);
 
     // secondary filters
     const filters = root.createDiv("ft-filters");
+    filters.createSpan({ cls: "ft-filter-label", text: "Filters:" });
 
     const typeSel = filters.createEl("select");
     [
@@ -1118,26 +1122,9 @@ export class FinanceDashboardView extends ItemView {
 
   // ── Insights tab: a collection of meaningful charts ─────────────
   private renderInsights(root: HTMLElement) {
-    // range selector
+    // range selector (dropdown)
     const bar = root.createDiv("ft-toolbar");
-    const presets: { key: RangePreset; label: string }[] = [
-      { key: "this-month", label: "This Month" },
-      { key: "last-month", label: "Last Month" },
-      { key: "this-year", label: "This Year" },
-      { key: "last-year", label: "Last Year" },
-      { key: "all", label: "All" },
-    ];
-    const wrap = bar.createDiv("ft-presets");
-    presets.forEach((p) => {
-      const b = wrap.createEl("button", {
-        text: p.label,
-        cls: "ft-chip" + (this.preset === p.key ? " is-active" : ""),
-      });
-      b.onclick = () => {
-        this.preset = p.key;
-        this.render();
-      };
-    });
+    this.renderRangeControl(bar);
 
     const range = this.currentRange();
     const inScope = this.nonCapital(
