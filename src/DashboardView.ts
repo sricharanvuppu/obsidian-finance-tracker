@@ -266,6 +266,9 @@ export class FinanceDashboardView extends ItemView {
   private renderModeTabs(root: HTMLElement) {
     // Row 1 (top): management / action buttons
     const actions = root.createDiv("ft-actions-row");
+    const addBtn = actions.createEl("button", { text: "＋ Add transaction", cls: "mod-cta ft-add-btn" });
+    addBtn.onclick = () =>
+      new AddTransactionModal(this.app, this.plugin, () => this.refresh()).open();
     const mkChip = (label: string, aria: string, onClick: () => void) => {
       const b = actions.createEl("button", { text: label, cls: "ft-chip" });
       b.setAttr("aria-label", aria);
@@ -525,10 +528,6 @@ export class FinanceDashboardView extends ItemView {
 
   private renderToolbar(root: HTMLElement) {
     const bar = root.createDiv("ft-toolbar");
-
-    const addBtn = bar.createEl("button", { text: "+ Add", cls: "mod-cta" });
-    addBtn.onclick = () =>
-      new AddTransactionModal(this.app, this.plugin, () => this.refresh()).open();
 
     this.renderRangeControl(bar);
 

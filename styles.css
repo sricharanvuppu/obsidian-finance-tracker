@@ -391,6 +391,7 @@
   padding-bottom: 8px;
   border-bottom: 1px solid var(--background-modifier-border);
 }
+.ft-add-btn { margin-right: 6px; font-weight: 600; }
 .ft-mode-tabs {
   display: flex;
   align-items: center;

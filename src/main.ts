@@ -34,13 +34,8 @@ export default class FinanceTrackerPlugin extends Plugin {
 
     this.registerView(VIEW_TYPE_FINANCE, (leaf) => new FinanceDashboardView(leaf, this));
 
-    // Ribbon: one click adds a transaction
-    this.addRibbonIcon("indian-rupee", "Add transaction", () => {
-      new AddTransactionModal(this.app, this, () => this.refreshDashboards()).open();
-    });
-
-    // Ribbon: open dashboard
-    this.addRibbonIcon("pie-chart", "Finance dashboard", () => {
+    // Single ribbon icon → opens the dashboard (add transactions from there).
+    this.addRibbonIcon("pie-chart", "Finance Tracker", () => {
       this.activateView();
     });
 
