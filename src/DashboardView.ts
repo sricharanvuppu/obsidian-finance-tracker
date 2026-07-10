@@ -13,7 +13,7 @@ import {
   LineController,
   BarController,
 } from "chart.js";
-import { Transaction, TxnType, EVENT_STATUS_LABELS } from "./types";
+import { Transaction, TxnType, EVENT_STATUS_LABELS, Account } from "./types";
 import {
   DateRange,
   RangePreset,
@@ -37,6 +37,9 @@ import {
   lendingNetCashInRange,
   accountName,
   dateTimeKey,
+  toBase,
+  currencyOfAccount,
+  baseCurrency,
 } from "./util";
 import { AddTransactionModal } from "./AddTransactionModal";
 import { RecurringModal } from "./RecurringModal";
@@ -159,6 +162,17 @@ export class FinanceDashboardView extends ItemView {
 
   private currentRange(): DateRange {
     return computeRange(this.preset, this.plugin.store.getAll(), this.custom ?? undefined);
+  }
+
+  /** Converts a transaction's amount into the base currency (identity if single-currency). */
+  private toBaseAmt(t: Transaction): number {
+    const code = currencyOfAccount(this.plugin.settings.accounts, t.account, this.plugin.settings);
+    return toBase(t.amount || 0, code, this.plugin.settings);
+  }
+
+  /** Sum of base-converted amounts for a given type. */
+  private sumBase(txns: Transaction[], type: TxnType): number {
+    return txns.filter((t) => t.type === type).reduce((s, t) => s + this.toBaseAmt(t), 0);
   }
 
   /** Total market value of tracked investment holdings. */
@@ -350,9 +364,9 @@ export class FinanceDashboardView extends ItemView {
     const tbody = table.createEl("tbody");
     for (const y of years) {
       const ytx = all.filter((t) => t.date.slice(0, 4) === y);
-      const income = sumByType(ytx, "income");
-      const expense = sumByType(ytx, "expense");
-      const invest = sumByType(ytx, "investment");
+      const income = this.sumBase(ytx, "income");
+      const expense = this.sumBase(ytx, "expense");
+      const invest = this.sumBase(ytx, "investment");
       const savings = income - expense;
       const rate = income > 0 ? (savings / income) * 100 : 0;
       const tr = tbody.createEl("tr");
@@ -381,9 +395,9 @@ export class FinanceDashboardView extends ItemView {
       const mk = `${selYear}-${String(m + 1).padStart(2, "0")}`;
       const mtx = all.filter((t) => t.date.slice(0, 7) === mk);
       if (mtx.length === 0) continue;
-      const income = sumByType(mtx, "income");
-      const expense = sumByType(mtx, "expense");
-      const invest = sumByType(mtx, "investment");
+      const income = this.sumBase(mtx, "income");
+      const expense = this.sumBase(mtx, "expense");
+      const invest = this.sumBase(mtx, "investment");
       const savings = income - expense;
       const tr = mbody.createEl("tr");
       tr.createEl("td", { text: monthLabel(mk) });
@@ -430,7 +444,7 @@ export class FinanceDashboardView extends ItemView {
       .filter((t) => t.type === "expense" && t.date.slice(0, 7) === this.budgetMonth);
     const actualByCat = new Map<string, number>();
     monthTx.forEach((t) =>
-      actualByCat.set(t.category, (actualByCat.get(t.category) ?? 0) + t.amount)
+      actualByCat.set(t.category, (actualByCat.get(t.category) ?? 0) + this.toBaseAmt(t))
     );
 
     let totalBudget = 0;
@@ -608,22 +622,22 @@ export class FinanceDashboardView extends ItemView {
   // ── Summary cards ────────────────────────────────────────────────
   private renderSummary(root: HTMLElement, txns: Transaction[]) {
     const mtx = this.nonCapital(txns); // exclude capital-event spend from monthly analysis
-    const income = sumByType(mtx, "income");
-    const expense = sumByType(mtx, "expense");
-    const investment = sumByType(mtx, "investment");
+    const income = this.sumBase(mtx, "income");
+    const expense = this.sumBase(mtx, "expense");
+    const investment = this.sumBase(mtx, "investment");
     const lendingCash = lendingNetCashInRange(this.plugin.store.getLoans(), this.currentRange());
     // Net cash flow is a true liquid-cash metric, so it counts EVERYTHING that
     // moved cash — including capital events (they go out of your income too).
     const netCash =
-      sumByType(txns, "income") -
-      sumByType(txns, "expense") -
-      sumByType(txns, "investment") +
+      this.sumBase(txns, "income") -
+      this.sumBase(txns, "expense") -
+      this.sumBase(txns, "investment") +
       lendingCash;
 
     const cap = this.capitalEventIds();
     const capitalSpend = txns
       .filter((t) => t.event && cap.has(t.event) && (t.type === "expense" || t.type === "investment"))
-      .reduce((s, t) => s + t.amount, 0);
+      .reduce((s, t) => s + this.toBaseAmt(t), 0);
 
     const cards = root.createDiv("ft-cards");
     const card = (label: string, value: number, cls: string, extra?: string, tooltip?: string) => {
@@ -659,8 +673,8 @@ export class FinanceDashboardView extends ItemView {
     const monthTxns = this.nonCapital(this.plugin.store.getAll().filter((t) => monthKey(t.date) === ym));
     if (monthTxns.length === 0 && (this.plugin.settings.savingsGoal ?? 0) <= 0) return;
 
-    const income = sumByType(monthTxns, "income");
-    const spend = sumByType(monthTxns, "expense");
+    const income = this.sumBase(monthTxns, "income");
+    const spend = this.sumBase(monthTxns, "expense");
     const daysInMonth = new Date(now.getFullYear(), now.getMonth() + 1, 0).getDate();
     const dayOfMonth = now.getDate();
     const projected = dayOfMonth > 0 ? (spend / dayOfMonth) * daysInMonth : spend;
@@ -720,13 +734,15 @@ export class FinanceDashboardView extends ItemView {
 
     const all = this.plugin.store.getAll();
     const balances = computeBalances(accounts, all, loans);
+    const conv = (b: { account: Account; balance: number }) =>
+      toBase(b.balance, b.account.currency, this.plugin.settings);
     const assets = balances
       .filter((b) => (b.account.type ?? "asset") === "asset")
-      .reduce((s, b) => s + b.balance, 0);
+      .reduce((s, b) => s + conv(b), 0);
     const accountDebt = balances
       .filter((b) => (b.account.type ?? "asset") !== "asset")
-      .reduce((s, b) => s + b.balance, 0); // negative when owing
-    const cash = assets + accountDebt; // net across all accounts
+      .reduce((s, b) => s + conv(b), 0); // negative when owing
+    const cash = assets + accountDebt; // net across all accounts, in base currency
     const worth = cash + receivable - payable + this.holdingsValue();
     const hasDebt = accountDebt < 0 || payable > 0;
 
@@ -745,7 +761,7 @@ export class FinanceDashboardView extends ItemView {
       c.createDiv({ cls: "ft-balance-name", text: b.account.name });
       const v = c.createDiv({
         cls: "ft-balance-value",
-        text: formatCurrency(b.balance, this.plugin.settings),
+        text: formatCurrency(b.balance, this.plugin.settings, b.account.currency),
       });
       if (b.balance < 0) v.addClass("ft-neg");
     }
@@ -855,7 +871,7 @@ export class FinanceDashboardView extends ItemView {
 
     const byCat = new Map<string, number>();
     this.nonCapital(txns).filter((t) => t.type === "expense").forEach((t) => {
-      byCat.set(t.category, (byCat.get(t.category) ?? 0) + t.amount);
+      byCat.set(t.category, (byCat.get(t.category) ?? 0) + this.toBaseAmt(t));
     });
     const entries = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]);
 
@@ -947,7 +963,7 @@ export class FinanceDashboardView extends ItemView {
       months.map((mk) =>
         inScope
           .filter((t) => t.type === type && monthKey(t.date) === mk)
-          .reduce((s, t) => s + t.amount, 0)
+          .reduce((s, t) => s + this.toBaseAmt(t), 0)
       );
     const incomeArr = bucket("income");
     const expenseArr = bucket("expense");
@@ -1012,7 +1028,7 @@ export class FinanceDashboardView extends ItemView {
       const evTxns = all.filter((t) => t.event === ev.id);
       const spent = evTxns
         .filter((t) => t.type === "expense" || t.type === "investment")
-        .reduce((s, t) => s + t.amount, 0);
+        .reduce((s, t) => s + this.toBaseAmt(t), 0);
       const target = ev.target ?? 0;
       const pct = target > 0 ? (spent / target) * 100 : 0;
       const over = target > 0 && spent > target;
@@ -1051,7 +1067,7 @@ export class FinanceDashboardView extends ItemView {
       // per-event charts: category pie + spend over time
       const byCat = new Map<string, number>();
       evTxns.filter((t) => t.type === "expense" || t.type === "investment").forEach((t) => {
-        byCat.set(t.category, (byCat.get(t.category) ?? 0) + t.amount);
+        byCat.set(t.category, (byCat.get(t.category) ?? 0) + this.toBaseAmt(t));
       });
       const cats = Array.from(byCat.entries()).sort((a, b) => b[1] - a[1]);
       if (cats.length) {
@@ -1071,7 +1087,7 @@ export class FinanceDashboardView extends ItemView {
             {
               label: "Spent",
               data: evMonthsE.map((mk) =>
-                evSpendTxns.filter((t) => monthKey(t.date) === mk).reduce((s, t) => s + t.amount, 0)
+                evSpendTxns.filter((t) => monthKey(t.date) === mk).reduce((s, t) => s + this.toBaseAmt(t), 0)
               ),
               backgroundColor: "#e15759",
             },
@@ -1154,8 +1170,8 @@ export class FinanceDashboardView extends ItemView {
       const isWant = (t: Transaction) =>
         wants.has(t.category) || wants.has(`${t.category}|${t.subcategory}`);
       const expenses = inScope.filter((t) => t.type === "expense");
-      const wantSum = expenses.filter((t) => isWant(t)).reduce((s, t) => s + t.amount, 0);
-      const needSum = expenses.filter((t) => !isWant(t)).reduce((s, t) => s + t.amount, 0);
+      const wantSum = expenses.filter((t) => isWant(t)).reduce((s, t) => s + this.toBaseAmt(t), 0);
+      const needSum = expenses.filter((t) => !isWant(t)).reduce((s, t) => s + this.toBaseAmt(t), 0);
       const totalNW = wantSum + needSum;
       if (totalNW > 0) {
         const nwCards = root.createDiv("ft-cards");
@@ -1181,7 +1197,7 @@ export class FinanceDashboardView extends ItemView {
       months.map((mk) =>
         inScope
           .filter((t) => t.type === type && monthKey(t.date) === mk)
-          .reduce((s, t) => s + t.amount, 0)
+          .reduce((s, t) => s + this.toBaseAmt(t), 0)
       );
     const incomeArr = bucket("income");
     const expenseArr = bucket("expense");
@@ -1238,7 +1254,7 @@ export class FinanceDashboardView extends ItemView {
       data: months.map((mk) =>
         inScope
           .filter((t) => t.type === "expense" && t.category === cat && monthKey(t.date) === mk)
-          .reduce((s, t) => s + t.amount, 0)
+          .reduce((s, t) => s + this.toBaseAmt(t), 0)
       ),
       backgroundColor: catColors[cat],
     }));
@@ -1246,7 +1262,7 @@ export class FinanceDashboardView extends ItemView {
     const otherData = months.map((mk) =>
       inScope
         .filter((t) => t.type === "expense" && !topCats.includes(t.category) && monthKey(t.date) === mk)
-        .reduce((s, t) => s + t.amount, 0)
+        .reduce((s, t) => s + this.toBaseAmt(t), 0)
     );
     if (otherData.some((v) => v > 0)) {
       stackedDatasets.push({ label: "Other", data: otherData, backgroundColor: "#bab0ac" });
@@ -1283,7 +1299,7 @@ export class FinanceDashboardView extends ItemView {
       const prev = months[months.length - 2];
       const expFor = (mk: string) => {
         const m = new Map<string, number>();
-        inScope.filter((t) => t.type === "expense" && monthKey(t.date) === mk).forEach((t) => m.set(t.category, (m.get(t.category) ?? 0) + t.amount));
+        inScope.filter((t) => t.type === "expense" && monthKey(t.date) === mk).forEach((t) => m.set(t.category, (m.get(t.category) ?? 0) + this.toBaseAmt(t)));
         return m;
       };
       const cm = expFor(cur), pm = expFor(prev);
@@ -1330,8 +1346,8 @@ export class FinanceDashboardView extends ItemView {
 
   /** Alert cards that make overspending obvious for the selected range. */
   private renderSpendingAlerts(root: HTMLElement, inScope: Transaction[]) {
-    const income = sumByType(inScope, "income");
-    const expense = sumByType(inScope, "expense");
+    const income = this.sumBase(inScope, "income");
+    const expense = this.sumBase(inScope, "expense");
     const ratio = income > 0 ? (expense / income) * 100 : 0;
     const expByCat = this.groupByCategory(inScope, "expense");
     const topCat = expByCat[0];
@@ -1345,13 +1361,13 @@ export class FinanceDashboardView extends ItemView {
     for (const cat of Object.keys(budgets)) {
       const actual = inScope
         .filter((t) => t.type === "expense" && t.category === cat && monthKey(t.date) === lastMonth)
-        .reduce((s, t) => s + t.amount, 0);
+        .reduce((s, t) => s + this.toBaseAmt(t), 0);
       if (actual > budgets[cat]) { overCount++; overAmount += actual - budgets[cat]; }
     }
 
     // this month vs average month expense
     const monthlyExp = months.map((mk) =>
-      inScope.filter((t) => t.type === "expense" && monthKey(t.date) === mk).reduce((s, t) => s + t.amount, 0)
+      inScope.filter((t) => t.type === "expense" && monthKey(t.date) === mk).reduce((s, t) => s + this.toBaseAmt(t), 0)
     );
     const avgExp = monthlyExp.length ? monthlyExp.reduce((s, v) => s + v, 0) / monthlyExp.length : 0;
     const lastExp = monthlyExp[monthlyExp.length - 1] ?? 0;
@@ -1386,7 +1402,7 @@ export class FinanceDashboardView extends ItemView {
   private groupByCategory(txns: Transaction[], type: TxnType): [string, number][] {
     const m = new Map<string, number>();
     txns.filter((t) => t.type === type).forEach((t) => {
-      m.set(t.category, (m.get(t.category) ?? 0) + t.amount);
+      m.set(t.category, (m.get(t.category) ?? 0) + this.toBaseAmt(t));
     });
     return Array.from(m.entries()).sort((a, b) => b[1] - a[1]);
   }
@@ -1676,7 +1692,13 @@ export class FinanceDashboardView extends ItemView {
       tr.createEl("td", { text: t.type }).addClass("ft-type-" + t.type);
       tr.createEl("td", { text: t.category });
       tr.createEl("td", { text: t.subcategory || "—" });
-      const amt = tr.createEl("td", { text: formatCurrency(t.amount, this.plugin.settings) });
+      const amt = tr.createEl("td", {
+        text: formatCurrency(
+          t.amount,
+          this.plugin.settings,
+          currencyOfAccount(this.plugin.settings.accounts, t.account, this.plugin.settings)
+        ),
+      });
       amt.addClass("ft-amount", "ft-type-" + t.type);
       const accounts = this.plugin.settings.accounts;
       const acctText =

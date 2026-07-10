@@ -54,6 +54,35 @@ export class FinanceSettingTab extends PluginSettingTab {
       );
 
     new Setting(containerEl)
+      .setName("Base currency")
+      .setDesc("Currency all totals/net worth are shown in. Per-account currencies convert to this.")
+      .addText((t) =>
+        t.setValue(this.plugin.settings.baseCurrency || this.plugin.settings.currency || "INR").onChange(async (v) => {
+          this.plugin.settings.baseCurrency = v.trim().toUpperCase() || "INR";
+          await this.plugin.saveSettings();
+        })
+      );
+
+    new Setting(containerEl)
+      .setName("Exchange rates")
+      .setDesc("One per line as \"CODE: value-in-base\" (e.g. USD: 83). Used to convert foreign-currency accounts to the base currency.")
+      .addTextArea((ta) => {
+        ta.inputEl.rows = 3;
+        ta.inputEl.addClass("ft-cat-textarea");
+        const rates = this.plugin.settings.rates || {};
+        ta.setValue(Object.keys(rates).map((k) => `${k}: ${rates[k]}`).join("\n"));
+        ta.onChange(async (v) => {
+          const map: Record<string, number> = {};
+          v.split("\n").forEach((line) => {
+            const m = /^\s*([A-Za-z]{2,5})\s*[:=]\s*([0-9.]+)\s*$/.exec(line);
+            if (m) map[m[1].toUpperCase()] = parseFloat(m[2]);
+          });
+          this.plugin.settings.rates = map;
+          await this.plugin.saveSettings();
+        });
+      });
+
+    new Setting(containerEl)
       .setName("Accounts")
       .setDesc("Manage accounts (cash, bank, wallets) and their initial balances.")
       .addButton((b) =>

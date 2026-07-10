@@ -221,6 +221,8 @@ export default class FinanceTrackerPlugin extends Plugin {
     if (!Array.isArray(this.settings.discretionary)) this.settings.discretionary = [];
     if (!Array.isArray(this.settings.favorites)) this.settings.favorites = [];
     if (!Array.isArray(this.settings.holdings)) this.settings.holdings = [];
+    if (!this.settings.baseCurrency) this.settings.baseCurrency = this.settings.currency || "INR";
+    if (!this.settings.rates || typeof this.settings.rates !== "object") this.settings.rates = {};
     if (typeof this.settings.savingsGoal !== "number") this.settings.savingsGoal = 0;
     if (!this.settings.budgets || typeof this.settings.budgets !== "object") {
       this.settings.budgets = {};
@@ -247,6 +249,8 @@ export default class FinanceTrackerPlugin extends Plugin {
       d.discretionary = d.discretionary ?? this.settings.discretionary ?? [];
       d.favorites = unionById(d.favorites ?? [], this.settings.favorites ?? []);
       d.holdings = unionById(d.holdings ?? [], this.settings.holdings ?? []);
+      d.baseCurrency = d.baseCurrency ?? this.settings.baseCurrency ?? this.settings.currency ?? "INR";
+      d.rates = d.rates ?? this.settings.rates ?? {};
       d.version = 2;
       await this.store.saveConfig();
     }
@@ -261,6 +265,8 @@ export default class FinanceTrackerPlugin extends Plugin {
     this.settings.discretionary = d.discretionary ?? [];
     this.settings.favorites = d.favorites ?? [];
     this.settings.holdings = d.holdings ?? [];
+    this.settings.baseCurrency = d.baseCurrency ?? this.settings.currency ?? "INR";
+    this.settings.rates = d.rates ?? {};
   }
 
   async saveSettings() {
@@ -283,6 +289,8 @@ export default class FinanceTrackerPlugin extends Plugin {
       this.store.data.discretionary = this.settings.discretionary;
       this.store.data.favorites = this.settings.favorites;
       this.store.data.holdings = this.settings.holdings;
+      this.store.data.baseCurrency = this.settings.baseCurrency;
+      this.store.data.rates = this.settings.rates;
       if ((this.store.data.version ?? 1) < 2) this.store.data.version = 2;
       await this.store.saveConfig();
     }

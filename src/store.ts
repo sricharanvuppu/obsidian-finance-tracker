@@ -101,6 +101,8 @@ export class FinanceStore {
       discretionary: parsed.discretionary,
       favorites: parsed.favorites,
       holdings: parsed.holdings,
+      baseCurrency: parsed.baseCurrency,
+      rates: parsed.rates,
     };
   }
 
@@ -140,6 +142,8 @@ export class FinanceStore {
       discretionary: cfg.discretionary,
       favorites: cfg.favorites,
       holdings: cfg.holdings,
+      baseCurrency: cfg.baseCurrency,
+      rates: cfg.rates,
     };
   }
 
@@ -185,6 +189,8 @@ export class FinanceStore {
       discretionary: this.data.discretionary ?? [],
       favorites: this.data.favorites ?? [],
       holdings: this.data.holdings ?? [],
+      baseCurrency: this.data.baseCurrency,
+      rates: this.data.rates ?? {},
     };
     await this.writeFile(this.configPath, JSON.stringify(cfg, null, 2));
   }

@@ -11,6 +11,7 @@ export class AccountModal extends Modal {
   private name = "";
   private initialBalance: number | null = null;
   private type: AccountType = "asset";
+  private currency = "";
 
   private listEl!: HTMLElement;
   private formEl!: HTMLElement;
@@ -78,6 +79,7 @@ export class AccountModal extends Modal {
         this.name = a.name;
         this.initialBalance = a.initialBalance;
         this.type = a.type ?? "asset";
+        this.currency = a.currency ?? "";
         this.renderForm();
       };
       const del = act.createEl("button", { text: "🗑", cls: "ft-icon-btn" });
@@ -132,6 +134,15 @@ export class AccountModal extends Modal {
         t.onChange((v) => (this.initialBalance = v === "" ? null : parseFloat(v)));
       });
 
+    new Setting(el)
+      .setName("Currency")
+      .setDesc("ISO code (e.g. INR, USD, EUR). Leave blank to use the base currency.")
+      .addText((t) => {
+        t.setValue(this.currency);
+        t.setPlaceholder(this.plugin.settings.baseCurrency || "INR");
+        t.onChange((v) => (this.currency = v));
+      });
+
     const actions = el.createDiv("ft-modal-actions");
     const save = actions.createEl("button", {
       text: this.editingId ? "Save" : "Add account",
@@ -152,6 +163,7 @@ export class AccountModal extends Modal {
     this.name = "";
     this.initialBalance = null;
     this.type = "asset";
+    this.currency = "";
   }
 
   private async save() {
@@ -163,12 +175,14 @@ export class AccountModal extends Modal {
     const raw = this.initialBalance == null || isNaN(this.initialBalance) ? 0 : Math.abs(this.initialBalance);
     // Debt accounts store the opening balance as negative (amount owed).
     const initial = this.type === "asset" ? raw : -raw;
+    const cur = this.currency.trim().toUpperCase() || undefined;
     if (this.editingId) {
       const a = this.plugin.settings.accounts.find((x) => x.id === this.editingId);
       if (a) {
         a.name = name;
         a.initialBalance = initial;
         a.type = this.type;
+        a.currency = cur;
       }
     } else {
       this.plugin.settings.accounts.push({
@@ -177,6 +191,7 @@ export class AccountModal extends Modal {
         initialBalance: initial,
         active: true,
         type: this.type,
+        currency: cur,
       });
     }
     await this.plugin.saveSettings();

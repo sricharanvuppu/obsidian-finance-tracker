@@ -1,15 +1,41 @@
 import { FinanceSettings, Transaction, TxnType, Frequency, Account, Loan } from "./types";
 
-export function formatCurrency(amount: number, settings: FinanceSettings): string {
+export function baseCurrency(settings: FinanceSettings): string {
+  return (settings as any).baseCurrency || settings.currency || "INR";
+}
+
+export function formatCurrency(amount: number, settings: FinanceSettings, currencyCode?: string): string {
+  const code = currencyCode || baseCurrency(settings);
   try {
     return new Intl.NumberFormat(settings.locale || "en-IN", {
       style: "currency",
-      currency: settings.currency || "INR",
+      currency: code,
       maximumFractionDigits: 2,
     }).format(amount);
   } catch {
-    return `${settings.currency} ${amount.toFixed(2)}`;
+    return `${code} ${amount.toFixed(2)}`;
   }
+}
+
+/** Rate to convert 1 unit of `code` into the base currency (base itself = 1). */
+export function rateFor(settings: FinanceSettings, code?: string): number {
+  const base = baseCurrency(settings);
+  if (!code || code === base) return 1;
+  const rates = (settings as any).rates as Record<string, number> | undefined;
+  const r = rates?.[code];
+  return r && r > 0 ? r : 1;
+}
+
+/** Converts an amount in `code` to the base currency. */
+export function toBase(amount: number, code: string | undefined, settings: FinanceSettings): number {
+  return amount * rateFor(settings, code);
+}
+
+/** Currency of an account (defaults to base). */
+export function currencyOfAccount(accounts: Account[], id: string | undefined, settings: FinanceSettings): string {
+  const base = baseCurrency(settings);
+  if (!id) return base;
+  return accounts.find((a) => a.id === id)?.currency || base;
 }
 
 export function todayISO(): string {

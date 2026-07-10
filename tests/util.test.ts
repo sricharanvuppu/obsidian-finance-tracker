@@ -18,6 +18,9 @@ import {
   dateTimeKey,
   computeRange,
   inRange,
+  toBase,
+  rateFor,
+  currencyOfAccount,
 } from "../src/util";
 
 let passed = 0;
@@ -122,6 +125,24 @@ const S = { currency: "INR", locale: "en-IN" } as any;
   ok("inRange outside", !inRange("2026-08-01", { from: "2026-07-01", to: "2026-07-31" }));
   const r = computeRange("this-year", []);
   ok("computeRange this-year spans year", r.from.endsWith("-01-01") && r.to.endsWith("-12-31"));
+}
+
+// ── multi-currency ──
+{
+  const cs = { currency: "INR", locale: "en-IN", baseCurrency: "INR", rates: { USD: 83, EUR: 90 } } as any;
+  eq("rate base = 1", rateFor(cs, "INR"), 1);
+  eq("rate USD", rateFor(cs, "USD"), 83);
+  eq("rate unknown = 1", rateFor(cs, "GBP"), 1);
+  eq("toBase USD", toBase(10, "USD", cs), 830);
+  eq("toBase base identity", toBase(500, "INR", cs), 500);
+  eq("toBase undefined = base", toBase(500, undefined, cs), 500);
+  const accts = [
+    { id: "us", name: "US", initialBalance: 0, active: true, currency: "USD" },
+    { id: "in", name: "IN", initialBalance: 0, active: true },
+  ];
+  eq("currencyOfAccount foreign", currencyOfAccount(accts as any, "us", cs), "USD");
+  eq("currencyOfAccount default base", currencyOfAccount(accts as any, "in", cs), "INR");
+  eq("currencyOfAccount none", currencyOfAccount(accts as any, undefined, cs), "INR");
 }
 
 console.log(`\n${passed} passed, ${failed} failed`);

@@ -100,6 +100,8 @@ export interface FinanceData {
   discretionary?: string[]; // expense category names treated as "wants"
   favorites?: QuickFavorite[];
   holdings?: Holding[];
+  baseCurrency?: string;
+  rates?: Record<string, number>;
 }
 
 export type LoanDirection = "lent" | "borrowed";
@@ -179,6 +181,8 @@ export interface FinanceSettings {
   favorites: QuickFavorite[];
   lastUsed?: LastUsed;
   holdings: Holding[];
+  baseCurrency: string;
+  rates: Record<string, number>; // currency code -> value in base currency
 }
 
 export const TYPE_LABELS: Record<TxnType, string> = {
@@ -233,4 +237,6 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   discretionary: [],
   favorites: [],
   holdings: [],
+  baseCurrency: "INR",
+  rates: {},
 };
