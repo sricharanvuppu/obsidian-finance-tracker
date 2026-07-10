@@ -208,9 +208,20 @@
 /* Charts */
 .ft-charts {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
   gap: 16px;
   margin-bottom: 16px;
+}
+
+/* Phone / narrow panes */
+@media (max-width: 520px) {
+  .ft-dashboard { padding: 6px 8px; }
+  .ft-charts { grid-template-columns: 1fr; }
+  .ft-cards { grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+  .ft-balance-cards { grid-template-columns: repeat(auto-fit, minmax(110px, 1fr)); }
+  .ft-chart-box { min-height: 220px; }
+  .ft-chart-box canvas { max-height: 260px; }
+  .ft-mode-tab { padding: 6px 10px; }
 }
 .ft-chart-box {
   background: var(--background-secondary);
