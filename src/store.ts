@@ -99,6 +99,7 @@ export class FinanceStore {
       events: parsed.events,
       savingsGoal: parsed.savingsGoal,
       discretionary: parsed.discretionary,
+      favorites: parsed.favorites,
     };
   }
 
@@ -136,6 +137,7 @@ export class FinanceStore {
       events: cfg.events,
       savingsGoal: cfg.savingsGoal,
       discretionary: cfg.discretionary,
+      favorites: cfg.favorites,
     };
   }
 
@@ -179,6 +181,7 @@ export class FinanceStore {
       events: this.data.events ?? [],
       savingsGoal: this.data.savingsGoal ?? 0,
       discretionary: this.data.discretionary ?? [],
+      favorites: this.data.favorites ?? [],
     };
     await this.writeFile(this.configPath, JSON.stringify(cfg, null, 2));
   }

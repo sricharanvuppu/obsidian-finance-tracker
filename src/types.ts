@@ -27,6 +27,24 @@ export interface Transaction {
   recurringId?: string; // set when auto-generated from a recurring rule
 }
 
+/** A saved quick-entry template for one-tap adding. */
+export interface QuickFavorite {
+  id: string;
+  label: string;
+  type: TxnType;
+  category: string;
+  subcategory: string;
+  account?: string;
+  amount?: number;
+}
+
+export interface LastUsed {
+  type?: TxnType;
+  account?: string;
+  category?: string;
+  subcategory?: string;
+}
+
 export type EventStatus = "planned" | "active" | "done";
 
 export const EVENT_STATUS_LABELS: Record<EventStatus, string> = {
@@ -59,6 +77,7 @@ export interface FinanceData {
   events?: LifeEvent[];
   savingsGoal?: number; // monthly savings target
   discretionary?: string[]; // expense category names treated as "wants"
+  favorites?: QuickFavorite[];
 }
 
 export type LoanDirection = "lent" | "borrowed";
@@ -135,6 +154,8 @@ export interface FinanceSettings {
   events: LifeEvent[];
   savingsGoal: number;
   discretionary: string[];
+  favorites: QuickFavorite[];
+  lastUsed?: LastUsed;
 }
 
 export const TYPE_LABELS: Record<TxnType, string> = {
@@ -187,4 +208,5 @@ export const DEFAULT_SETTINGS: FinanceSettings = {
   events: [],
   savingsGoal: 0,
   discretionary: [],
+  favorites: [],
 };

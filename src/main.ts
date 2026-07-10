@@ -110,6 +110,16 @@ export default class FinanceTrackerPlugin extends Plugin {
     // Views are cleaned up by Obsidian; charts are destroyed in view.onClose().
   }
 
+  /** Persists only the device-local "last used" prefs (cheap, no config write). */
+  async saveLastUsed() {
+    await this.saveData({
+      dataFilePath: this.settings.dataFilePath,
+      currency: this.settings.currency,
+      locale: this.settings.locale,
+      lastUsed: this.settings.lastUsed,
+    });
+  }
+
   private refreshDashboards() {
     this.app.workspace.getLeavesOfType(VIEW_TYPE_FINANCE).forEach((leaf) => {
       const view = leaf.view;
@@ -200,6 +210,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     if (!Array.isArray(this.settings.accounts)) this.settings.accounts = [];
     if (!Array.isArray(this.settings.events)) this.settings.events = [];
     if (!Array.isArray(this.settings.discretionary)) this.settings.discretionary = [];
+    if (!Array.isArray(this.settings.favorites)) this.settings.favorites = [];
     if (typeof this.settings.savingsGoal !== "number") this.settings.savingsGoal = 0;
     if (!this.settings.budgets || typeof this.settings.budgets !== "object") {
       this.settings.budgets = {};
@@ -224,6 +235,7 @@ export default class FinanceTrackerPlugin extends Plugin {
       d.categories = d.categories ?? this.settings.categories ?? DEFAULT_SETTINGS.categories;
       d.savingsGoal = d.savingsGoal ?? this.settings.savingsGoal ?? 0;
       d.discretionary = d.discretionary ?? this.settings.discretionary ?? [];
+      d.favorites = unionById(d.favorites ?? [], this.settings.favorites ?? []);
       d.version = 2;
       await this.store.saveConfig();
     }
@@ -236,6 +248,7 @@ export default class FinanceTrackerPlugin extends Plugin {
     this.settings.events = d.events ?? [];
     this.settings.savingsGoal = d.savingsGoal ?? 0;
     this.settings.discretionary = d.discretionary ?? [];
+    this.settings.favorites = d.favorites ?? [];
   }
 
   async saveSettings() {
@@ -245,6 +258,7 @@ export default class FinanceTrackerPlugin extends Plugin {
       dataFilePath: this.settings.dataFilePath,
       currency: this.settings.currency,
       locale: this.settings.locale,
+      lastUsed: this.settings.lastUsed,
     });
     // Shared config is persisted into the synced data file.
     if (this.store) {
@@ -255,6 +269,7 @@ export default class FinanceTrackerPlugin extends Plugin {
       this.store.data.events = this.settings.events;
       this.store.data.savingsGoal = this.settings.savingsGoal;
       this.store.data.discretionary = this.settings.discretionary;
+      this.store.data.favorites = this.settings.favorites;
       if ((this.store.data.version ?? 1) < 2) this.store.data.version = 2;
       await this.store.saveConfig();
     }

@@ -1,5 +1,5 @@
 import { App, Modal, Notice, Setting } from "obsidian";
-import { Account, CategoryMap, CategoryType, Transaction, TxnType, TYPE_LABELS } from "./types";
+import { Account, CategoryMap, CategoryType, Transaction, TxnType, TYPE_LABELS, QuickFavorite } from "./types";
 import { todayISO, nowTimeIST, formatCurrency } from "./util";
 import { PromptModal } from "./PromptModal";
 import type FinanceTrackerPlugin from "./main";
@@ -40,6 +40,15 @@ export class AddTransactionModal extends Modal {
       this.account = editing.account ?? "";
       this.toAccount = editing.toAccount ?? "";
       this.event = editing.event ?? "";
+    } else {
+      // prefill from last-used (device-local) for faster entry
+      const lu = plugin.settings.lastUsed;
+      if (lu) {
+        if (lu.type) this.type = lu.type;
+        if (lu.account) this.account = lu.account;
+        if (lu.category) this.category = lu.category;
+        if (lu.subcategory) this.subcategory = lu.subcategory;
+      }
     }
   }
 
@@ -56,6 +65,19 @@ export class AddTransactionModal extends Modal {
     const { contentEl } = this;
     contentEl.addClass("ft-modal");
     contentEl.createEl("h2", { text: this.editing ? "Edit transaction" : "Add transaction" });
+
+    // Favorites quick-fill (only for new entries)
+    if (!this.editing) {
+      const favs = this.plugin.settings.favorites || [];
+      if (favs.length > 0) {
+        const favRow = contentEl.createDiv("ft-fav-row");
+        favRow.createSpan({ cls: "ft-fav-label", text: "Quick:" });
+        favs.forEach((f) => {
+          const chip = favRow.createEl("button", { text: f.label, cls: "ft-chip" });
+          chip.onclick = () => this.applyFavorite(f);
+        });
+      }
+    }
 
     // default account = first active account
     const accts = this.activeAccounts();
@@ -145,6 +167,11 @@ export class AddTransactionModal extends Modal {
       cls: "mod-cta",
     });
     saveBtn.onclick = () => this.submit();
+    if (!this.editing && this.type !== "transfer") {
+      const favBtn = actions.createEl("button", { text: "☆ Favorite" });
+      favBtn.setAttr("aria-label", "Save current entry as a favorite");
+      favBtn.onclick = () => this.saveAsFavorite();
+    }
     const cancelBtn = actions.createEl("button", { text: "Cancel" });
     cancelBtn.onclick = () => this.close();
 
@@ -154,6 +181,43 @@ export class AddTransactionModal extends Modal {
       this.subcategory = (this.catMap()[this.category] ?? [])[0] ?? "";
     }
     this.renderDynamic();
+  }
+
+  /** Fills the form from a saved favorite and re-renders. */
+  private applyFavorite(f: QuickFavorite) {
+    this.type = f.type;
+    this.category = f.category;
+    this.subcategory = f.subcategory;
+    if (f.account) this.account = f.account;
+    if (f.amount != null) this.amount = f.amount;
+    this.contentEl.empty();
+    this.onOpen();
+  }
+
+  private saveAsFavorite() {
+    if (this.type === "transfer") {
+      new Notice("Favorites are for income/expense/investment entries.");
+      return;
+    }
+    if (!this.category) {
+      new Notice("Choose a category first.");
+      return;
+    }
+    const defaultLabel = this.subcategory || this.category;
+    new PromptModal(this.app, "Save as favorite", `Label (e.g. ${defaultLabel})`, async (label) => {
+      const fav: QuickFavorite = {
+        id: Date.now().toString(36) + "-" + Math.random().toString(36).slice(2, 8),
+        label: label || defaultLabel,
+        type: this.type,
+        category: this.category,
+        subcategory: this.subcategory,
+        account: this.account || undefined,
+        amount: this.amount != null && !isNaN(this.amount) ? Math.abs(this.amount) : undefined,
+      };
+      this.plugin.settings.favorites.push(fav);
+      await this.plugin.saveSettings();
+      new Notice(`Saved favorite "${fav.label}".`);
+    }).open();
   }
 
   /** Renders the category/sub-category or transfer account fields depending on type. */
@@ -332,6 +396,16 @@ export class AddTransactionModal extends Modal {
       new Notice("Transaction added.");
     }
     this.checkBudgetAlert(payload);
+    // remember last-used for faster next entry (device-local)
+    if (!this.editing) {
+      this.plugin.settings.lastUsed = {
+        type: this.type,
+        account: this.account || undefined,
+        category: this.type === "transfer" ? undefined : this.category,
+        subcategory: this.type === "transfer" ? undefined : this.subcategory,
+      };
+      await this.plugin.saveLastUsed();
+    }
     this.onSaved();
     this.close();
   }
